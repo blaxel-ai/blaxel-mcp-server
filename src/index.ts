@@ -30,6 +30,7 @@ import { registerGetMcpHubDefinitionTool, registerListMcpHubDefinitionsTool } fr
 import { registerLocalAgentTool } from "./tools/local/agent.js";
 import { registerLocalDeployTool } from "./tools/local/deploy.js";
 import { registerLocalJobTool } from "./tools/local/job.js";
+import { registerLocalListTemplatesTool } from "./tools/local/listTemplates.js";
 import { registerLocalMcpServerTool } from "./tools/local/mcpServer.js";
 import { registerLocalRunTool } from "./tools/local/run.js";
 import { registerLocalSandboxTool } from "./tools/local/sandbox.js";
@@ -84,6 +85,7 @@ async function start() {
   // local tools for deploying and running
   registerLocalDeployTool(server);
   registerLocalRunTool(server);
+  registerLocalListTemplatesTool(server);
   await server.connect(transport);
   fileLogger.info("Server started; resources and delete tools registered");
 }
