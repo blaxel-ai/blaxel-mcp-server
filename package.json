@@ -1,0 +1,37 @@
+{
+  "name": "blaxel-mcp",
+  "version": "0.0.1",
+  "description": "Blaxel MCP Server",
+  "main": "dist/server.js",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "prod": "node dist/index.js",
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "inspect": "mcp-inspector tsx src/index.ts",
+    "test:e2e": "vitest run e2e/**/*.ts",
+    "test:agent": "vitest run e2e/create-mcp-with-agent.spec.ts",
+    "test:mastra": "vitest run e2e/mastra-agent.spec.ts"
+  },
+  "dependencies": {
+    "@blaxel/core": "0.2.25",
+    "@blaxel/telemetry": "0.2.25",
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.2",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "@ai-sdk/openai": "^1.0.0",
+    "@mastra/core": "^0.13.2",
+    "@mastra/mcp": "^0.10.11",
+    "@modelcontextprotocol/inspector": "0.16.3",
+    "@types/ws": "^8.18.1",
+    "ai": "^3.0.0",
+    "dotenv": "^16.4.0",
+    "tailwindcss": "^3.4.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^2.0.5"
+  }
+}
