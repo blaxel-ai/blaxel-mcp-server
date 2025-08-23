@@ -4,6 +4,7 @@ import { existsSync } from "fs";
 import { z } from "zod";
 import { ensureBlaxelWorkspace } from "../../utils/blaxelAuth.js";
 import { toolError } from "../../utils/error.js";
+import { buildWorkspaceFlag } from "../../utils/workspaceFlag.js";
 
 export function registerLocalRunTool(server: McpServer) {
   server.tool(
@@ -83,8 +84,8 @@ export function registerLocalRunTool(server: McpServer) {
         }
 
 
-        // Build the CLI command with workspace
-        let command = `bl run ${resourceType} ${resourceName} -w ${workspace}`;
+        // Build the CLI command with workspace if available
+        let command = `bl run ${resourceType} ${resourceName}${buildWorkspaceFlag(workspace)}`;
 
         if (data) {
           // Escape single quotes in JSON data

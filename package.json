@@ -7,11 +7,16 @@
     "start": "tsx src/index.ts",
     "prod": "node dist/index.js",
     "build": "tsc",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsc --watch",
     "inspect": "mcp-inspector tsx src/index.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run src/**/*.spec.ts",
+    "test:watch": "vitest watch",
     "test:e2e": "vitest run e2e/**/*.ts",
     "test:agent": "vitest run e2e/create-mcp-with-agent.spec.ts",
-    "test:mastra": "vitest run e2e/mastra-agent.spec.ts"
+    "test:mastra": "vitest run e2e/mastra-agent.spec.ts",
+    "test:search": "vitest run e2e/agent-with-search.spec.ts",
+    "test:job": "vitest run e2e/job-with-mastra-agent.spec.ts"
   },
   "dependencies": {
     "@blaxel/core": "0.2.25",

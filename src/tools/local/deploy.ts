@@ -5,6 +5,7 @@ import { join } from "path";
 import { z } from "zod";
 import { ensureBlaxelWorkspace } from "../../utils/blaxelAuth.js";
 import { toolError } from "../../utils/error.js";
+import { buildWorkspaceFlag } from "../../utils/workspaceFlag.js";
 
 export function registerLocalDeployTool(server: McpServer) {
   server.tool(
@@ -79,8 +80,8 @@ export function registerLocalDeployTool(server: McpServer) {
           );
         }
 
-        // Build the CLI command with workspace
-        let command = `bl deploy -w ${workspace}`;
+        // Build the CLI command with workspace if available
+        let command = `bl deploy${buildWorkspaceFlag(workspace)}`;
 
         if (directory) {
           command += ` --directory ${directory}`;

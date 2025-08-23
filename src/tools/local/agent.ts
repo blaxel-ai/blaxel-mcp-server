@@ -5,6 +5,7 @@ import { join } from "path";
 import { z } from "zod";
 import { ensureBlaxelWorkspace } from "../../utils/blaxelAuth.js";
 import { toolError } from "../../utils/error.js";
+import { buildWorkspaceFlag } from "../../utils/workspaceFlag.js";
 
 export function registerLocalAgentTool(server: McpServer) {
   server.tool(
@@ -13,8 +14,8 @@ export function registerLocalAgentTool(server: McpServer) {
     {
       directory: z
         .string()
-        .min(1, "Directory name is required")
-        .describe("Name of the directory to create for the agent app"),
+        .min(1, "Directory path is required")
+        .describe("Complete path to the directory to create for the agent app (e.g., use `pwd`/my-agent for current directory)"),
       template: z
         .string()
         .optional()
@@ -33,8 +34,8 @@ export function registerLocalAgentTool(server: McpServer) {
           return toolError(`Directory '${directory}' already exists`, null);
         }
 
-        // Build the CLI command with -y flag to skip prompts and workspace
-        let command = `bl create-agent-app ${directory} -y -w ${workspace}`;
+        // Build the CLI command with -y flag to skip prompts and workspace if available
+        let command = `bl create-agent-app ${directory} -y${buildWorkspaceFlag(workspace)}`;
         if (template) {
           command += ` --template ${template}`;
         }

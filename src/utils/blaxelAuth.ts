@@ -1,55 +1,128 @@
-import { existsSync, readFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
+import { execSync } from "child_process";
+import { fileLogger } from "./log";
 
-export function ensureBlaxelWorkspace(): string {
+// Track if we've already performed login in this session
+let hasPerformedLogin = false;
+
+/**
+ * Gets the current workspace from `bl workspace` command output
+ */
+function getCurrentWorkspace(): string | undefined {
+  try {
+    const output = execSync("bl workspace", {
+      encoding: "utf-8",
+      stdio: "pipe"
+    });
+
+    // Parse the workspace list to find the current one (marked with *)
+    // Format is:
+    // NAME                           CURRENT
+    // workspace1
+    // workspace2                     *
+    const lines = output.split('\n');
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.includes('*')) {
+        // Extract workspace name (first column)
+        const parts = line.trim().split(/\s+/);
+        if (parts[0] && parts[0] !== 'NAME') {
+          return parts[0];
+        }
+      }
+    }
+
+    return undefined;
+  } catch (error: any) {
+    return undefined;
+  }
+}
+
+/**
+ * Gets list of available workspaces from `bl workspace` command
+ */
+function getWorkspaceList(): string[] {
+  try {
+    const output = execSync("bl workspace", {
+      encoding: "utf-8",
+      stdio: "pipe"
+    });
+
+    // Parse the workspace list
+    // Format is typically:
+    // NAME                           CURRENT
+    // workspace1
+    // workspace2                     *
+    const lines = output.split('\n');
+    const workspaces: string[] = [];
+
+    // Skip header line
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line) {
+        // Extract workspace name (first column)
+        const parts = line.split(/\s+/);
+        if (parts[0] && parts[0] !== 'NAME') {
+          workspaces.push(parts[0]);
+        }
+      }
+    }
+
+    return workspaces;
+  } catch (error: any) {
+    return [];
+  }
+}
+
+export function ensureBlaxelWorkspace(): string | undefined {
   const workspace = process.env.BL_WORKSPACE;
   const apiKey = process.env.BL_API_KEY;
 
-  if (!workspace || !apiKey) {
-    throw new Error(
-      "BL_WORKSPACE and BL_API_KEY environment variables must be set"
-    );
+  // Case 1: Local user without env vars - use current workspace
+  if (!workspace) {
+    const currentWorkspace = getCurrentWorkspace();
+    if (!currentWorkspace) {
+      fileLogger.error("No current workspace found. Please run 'bl login' to set up a workspace.");
+      return undefined;
+    }
+    return currentWorkspace;
   }
 
-  const configPath = join(homedir(), ".blaxel", "config.yaml");
+  // Case 2: Both env vars are set - validate and perform login
+  if (workspace && apiKey) {
+    // Get available workspaces
+    const availableWorkspaces = getWorkspaceList();
 
-  // Check if config file exists
-  if (!existsSync(configPath)) {
-    throw new Error(
-      "Blaxel config not found. Please run 'bl login' to authenticate."
-    );
-  }
-
-  try {
-    // Read the config file
-    const configContent = readFileSync(configPath, "utf-8");
-
-    // Check if the workspace exists in the workspaces list
-    const workspaceRegex = new RegExp(`^\\s*-\\s+name:\\s+${workspace}\\s*$`, 'm');
-    const hasWorkspace = workspaceRegex.test(configContent);
-
-    // Check if API key exists in credentials
-    const apiKeyRegex = /credentials:\s*\n\s*apiKey:\s*\S+/;
-    const hasApiKey = apiKeyRegex.test(configContent);
-
-    if (!hasWorkspace) {
+    // If we can get the workspace list, validate the workspace exists
+    if (availableWorkspaces.length > 0 && !availableWorkspaces.includes(workspace)) {
       throw new Error(
-        `Workspace '${workspace}' not found in Blaxel config. Please run 'bl login ${workspace}' to authenticate.`
+        `Workspace '${workspace}' not found. Available workspaces: ${availableWorkspaces.join(', ')}`
       );
     }
 
-    if (!hasApiKey) {
-      throw new Error(
-        "API key not found in Blaxel config. Please run 'bl login' to authenticate."
-      );
+    // Only perform login once per session
+    if (!hasPerformedLogin) {
+      try {
+        // Set the API key in environment for the bl login command
+        execSync(`bl login ${workspace}`, {
+          encoding: "utf-8",
+          stdio: "pipe",
+          env: { ...process.env, BL_API_KEY: apiKey }
+        });
+        hasPerformedLogin = true;
+      } catch (error: any) {
+        throw new Error(
+          `Failed to login to workspace '${workspace}': ${error.message}`
+        );
+      }
     }
 
     return workspace;
-  } catch (error: any) {
-    if (error.message.includes("Workspace") || error.message.includes("API key")) {
-      throw error;
-    }
-    throw new Error(`Failed to read Blaxel config: ${error.message}`);
   }
+
+  // Case 3: Only one env var is set (invalid configuration)
+  fileLogger.error("Both BL_WORKSPACE and BL_API_KEY must be set together, or neither should be set for local usage.");
+  throw new Error(
+    "Both BL_WORKSPACE and BL_API_KEY must be set together, or neither should be set for local usage."
+  );
 }

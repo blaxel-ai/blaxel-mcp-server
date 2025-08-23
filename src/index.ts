@@ -32,6 +32,7 @@ import { registerLocalDeployTool } from "./tools/local/deploy.js";
 import { registerLocalJobTool } from "./tools/local/job.js";
 import { registerLocalListTemplatesTool } from "./tools/local/listTemplates.js";
 import { registerLocalMcpServerTool } from "./tools/local/mcpServer.js";
+import { registerLocalQuickStartTool } from "./tools/local/quickStart.js";
 import { registerLocalRunTool } from "./tools/local/run.js";
 import { registerLocalSandboxTool } from "./tools/local/sandbox.js";
 import { fileLogger } from "./utils/log.js";
@@ -86,6 +87,7 @@ async function start() {
   registerLocalDeployTool(server);
   registerLocalRunTool(server);
   registerLocalListTemplatesTool(server);
+  registerLocalQuickStartTool(server);
   await server.connect(transport);
   fileLogger.info("Server started; resources and delete tools registered");
 }
