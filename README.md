@@ -1,208 +1,374 @@
-# Blaxel MCP Hello World TypeScript
+# Blaxel MCP Server (Go)
 
-<p align="center">
-  <img src="https://blaxel.ai/logo.png" alt="Blaxel" width="200"/>
-</p>
+A Model Context Protocol (MCP) server for Blaxel, written in Go using the [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go) library. This server provides tools for managing Blaxel resources including agents, model APIs, MCP servers, sandboxes, jobs, integrations, users, and service accounts.
 
-<div align="center">
+## Architecture
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js 18+](https://img.shields.io/badge/node-18+-green.svg)](https://nodejs.org/downloads/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8+-blue.svg)](https://www.typescriptlang.org/)
-[![MCP](https://img.shields.io/badge/MCP-Protocol-brightgreen.svg)](https://github.com/modelcontextprotocol/servers)
-[![PNPM](https://img.shields.io/badge/PNPM-package_manager-orange.svg)](https://pnpm.io/)
+This implementation follows the same pattern as the [GitHub MCP Server](https://github.com/github/github-mcp-server), converting all resources to tools for better client compatibility.
 
-</div>
+## Quick Start
 
-A TypeScript template implementation of a Model Context Protocol (MCP) server using the Blaxel platform. This simple "Hello World" server demonstrates how to create MCP tools and functions that can be integrated with AI agents and language models through the standardized MCP interface.
+```bash
+# Build the server
+make build
 
-## 📑 Table of Contents
+# Run the server
+export BLAXEL_API_KEY="your-api-key"
+export BLAXEL_WORKSPACE="your-workspace"
+./build/blaxel-mcp-server
 
-- [✨ Features](#features)
-- [🚀 Quick Start](#quick-start)
-- [📋 Prerequisites](#prerequisites)
-- [💻 Installation](#installation)
-- [🔧 Usage](#usage)
-  - [Running Locally](#running-locally)
-  - [Testing](#testing)
-  - [Deployment](#deployment)
-- [📁 Project Structure](#project-structure)
-- [❓ Troubleshooting](#troubleshooting)
-- [👥 Contributing](#contributing)
-- [🆘 Support](#support)
-- [📄 License](#license)
+# Test the server
+./test_mcp.sh
+```
 
-## ✨ Features
+## Current Status
 
-- Simple MCP server implementation with TypeScript
-- "Hello World" tool function with parameter validation
-- Zod schema validation for robust type safety
-- Built-in Blaxel platform integration for seamless deployment
-- Support for both stdio and Blaxel transport protocols
-- Hot reload development environment
-- Production-ready TypeScript compilation
-- Easy integration with AI agents and language models
+**Note**: This is a complete migration from TypeScript to Go, following the GitHub MCP server pattern. All resources have been converted to tools for better client compatibility.
 
-## 🚀 Quick Start
+### Implemented Features:
+- ✅ Basic MCP server infrastructure
+- ✅ Complete tool registration system
+- ✅ Configuration via environment variables
+- ✅ Read-only mode support
+- ✅ Toolset filtering
 
-For those who want to get up and running quickly:
+### Tool Implementation Status:
+- ✅ **Agents**: List, get, and delete operations working with SDK
+- ✅ **Model APIs**: Simplified creation with automatic integration setup
+- ✅ **MCP Servers**: Simplified creation with automatic integration setup
+- ✅ **Integrations**: Full CRUD operations using SDK's `IntegrationConnection` API
+- ✅ **Local Tools**: All local development tools functional
+- ⚠️ **Sandboxes**: Placeholder implementation (API not available in SDK)
+- ⚠️ **Jobs**: Placeholder implementation (API not available in SDK)
+- ⚠️ **Users**: Placeholder implementation (API not available in SDK)
+- ⚠️ **Service Accounts**: Placeholder implementation (API not available in SDK)
+
+Note: Some tools return placeholder responses as the corresponding APIs are not yet available in the Blaxel SDK
+
+## Features
+
+- **Complete Resource Management**: All Blaxel resources are exposed as tools instead of MCP resources for better client compatibility
+- **Read-Only Mode**: Support for running in read-only mode to prevent destructive operations
+- **Toolset Filtering**: Ability to enable/disable specific toolsets
+- **Local Development Tools**: Tools for creating and deploying Blaxel projects locally
+- **Configuration via Environment Variables**: Flexible configuration options
+
+## Installation
+
+### Prerequisites
+
+- Go 1.21 or later
+- Blaxel CLI installed (`npm install -g @blaxel/cli`)
+- Valid Blaxel credentials
+
+### Building from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/blaxel-ai/template-mcp-hello-world-ts.git
-
-# Navigate to the project directory
-cd template-mcp-hello-world-ts
+git clone https://github.com/blaxel-ai/blaxel-mcp-server.git
+cd blaxel-mcp-server
 
 # Install dependencies
-npm install
+go mod download
 
-# Start the development server
-npm dev
+# Build the binary
+go build -o blaxel-mcp-server ./cmd/blaxel-mcp-server
 
-# In another terminal, deploy to Blaxel
-bl deploy
-
-# Test MCP server
-npm run inspect
+# Run the server
+./blaxel-mcp-server
 ```
 
-## 📋 Prerequisites
+## Configuration
 
-- **Node.js:** 18.0 or later
-- **Blaxel Platform Setup:** Complete Blaxel setup by following the [quickstart guide](https://docs.blaxel.ai/Get-started#quickstart)
-  - **[Blaxel CLI](https://docs.blaxel.ai/Get-started):** Ensure you have the Blaxel CLI installed. If not, install it globally:
-    ```bash
-    curl -fsSL https://raw.githubusercontent.com/blaxel-ai/toolkit/main/install.sh | BINDIR=/usr/local/bin sudo -E sh
-    ```
-  - **Blaxel login:** Login to Blaxel platform
-    ```bash
-    bl login YOUR-WORKSPACE
-    ```
-
-## 💻 Installation
-
-**Clone the repository and install dependencies:**
+### Environment Variables
 
 ```bash
-git clone https://github.com/blaxel-ai/template-mcp-hello-world-ts.git
-cd template-mcp-hello-world-ts
-npm install
+# Authentication (choose one method)
+export BLAXEL_API_KEY="your-api-key"        # API Key authentication
+export BLAXEL_ACCESS_TOKEN="your-token"     # Access token authentication
+
+# Optional configuration
+export BLAXEL_WORKSPACE="your-workspace"    # Target workspace
+export BLAXEL_API_ENDPOINT="https://api.blaxel.ai"  # API endpoint (default: https://api.blaxel.ai)
+export BLAXEL_DEBUG="true"                  # Enable debug logging
+export BLAXEL_READ_ONLY="true"              # Run in read-only mode
 ```
 
-## 🔧 Usage
-
-### Running Locally
-
-Start the development server with hot reloading:
+### Command Line Flags
 
 ```bash
-npm dev
+# Show version information
+./blaxel-mcp-server --version
+
+# Run in read-only mode
+./blaxel-mcp-server --read-only
+
+# Enable specific toolsets
+./blaxel-mcp-server --toolsets agents,modelapis,integrations
+
+# Enable all toolsets (default)
+./blaxel-mcp-server --toolsets all
 ```
 
-For production build and run:
+## Available Tools
+
+### Agent Management
+- `list_agents` - List all agents in the workspace
+- `get_agent` - Get details of a specific agent
+- `delete_agent` - Delete an agent by name
+
+### Model API Management
+- `list_model_apis` - List all model APIs
+- `get_model_api` - Get details of a specific model API
+- `create_model_api` - **Dual Mode!** Create a model API
+  - **Mode 1**: Provide `provider`, `apiKey` to create new integration automatically
+  - **Mode 2**: Provide `integrationConnectionName` to use existing integration
+  - Flexible approach for different use cases
+- `delete_model_api` - Delete a model API
+
+### MCP Server Management
+- `list_mcp_servers` - List all MCP servers (functions)
+- `get_mcp_server` - Get details of a specific MCP server
+- `create_mcp_server` - **Dual Mode!** Create an MCP server
+  - **Mode 1**: Provide `integrationType`, `secret`, `config` to create new integration
+  - **Mode 2**: Provide `integrationConnectionName` to use existing integration
+  - Flexible approach for different use cases
+- `delete_mcp_server` - Delete an MCP server
+
+### Sandbox Management
+- `list_sandboxes` - List all sandboxes
+- `get_sandbox` - Get details of a specific sandbox
+- `delete_sandbox` - Delete a sandbox
+
+### Job Management
+- `list_jobs` - List all jobs
+- `get_job` - Get details of a specific job
+- `delete_job` - Delete a job by ID
+
+### Integration Management
+- `list_integrations` - List all integration connections
+- `get_integration` - Get details of a specific integration
+- `create_mcp_integration` - Create an MCP integration
+- `create_model_api_integration` - Create a model API integration
+- `delete_integration` - Delete an integration
+- `list_mcp_integrations` - List available MCP Hub integrations
+- `get_mcp_integration` - Get MCP Hub integration details
+- `list_integration_models` - List models for an integration
+
+### User Management
+- `list_users` - List all users in the workspace
+- `invite_user` - Invite a user to the workspace
+- `delete_user` - Remove a user from the workspace
+
+### Service Account Management
+- `list_service_accounts` - List all service accounts
+- `create_service_account` - Create a new service account
+- `delete_service_account` - Delete a service account
+
+### Local Development Tools
+- `local_create_agent` - Create a new agent project locally
+- `local_create_job` - Create a new job project locally
+- `local_create_mcp_server` - Create a new MCP server project locally
+- `local_create_sandbox` - Create a new sandbox project locally
+- `local_deploy_directory` - Deploy a local directory to Blaxel
+- `local_run_deployed_resource` - Run a deployed resource
+- `local_list_templates` - List available templates
+- `local_quick_start_guide` - Get quick start guide
+
+## Simplified Tool Usage
+
+### Key Improvements
+
+**Integration with Blaxel SDK**: The MCP server now fully utilizes the Blaxel SDK's `CreateIntegrationConnection` API, enabling actual integration creation rather than simulated operations. This means:
+
+- **Real Integration Creation**: When you create an MCP server or Model API, the integration is actually created in Blaxel
+- **Automatic Linking**: Resources are automatically linked to their integrations
+- **Error Recovery**: If resource creation fails after integration creation, appropriate error messages guide recovery
+- **Flexible Integration Options**: Support for both creating new integrations and reusing existing ones
+
+### Creating Resources - Two Flexible Modes
+
+Both MCP servers and Model APIs now support two modes of creation:
+
+#### Mode 1: Create with New Integration (One-Step)
+
+Create a resource and its integration in a single tool call:
+
+**MCP Server with New Integration:**
+```json
+{
+  "tool": "create_mcp_server",
+  "arguments": {
+    "name": "my-github-mcp",
+    "integrationType": "github",
+    "secret": {
+      "token": "ghp_..."
+    },
+    "config": {
+      "owner": "my-org"
+    }
+  }
+}
+```
+
+**Model API with New Integration:**
+```json
+{
+  "tool": "create_model_api",
+  "arguments": {
+    "name": "my-gpt4-api",
+    "provider": "openai",
+    "apiKey": "sk-...",
+    "model": "gpt-4",
+    "endpoint": "https://api.openai.com/v1"  // optional
+  }
+}
+```
+
+#### Mode 2: Create with Existing Integration
+
+Reuse an existing integration connection:
+
+**MCP Server with Existing Integration:**
+```json
+{
+  "tool": "create_mcp_server",
+  "arguments": {
+    "name": "another-github-mcp",
+    "integrationConnectionName": "my-github-integration"
+  }
+}
+```
+
+**Model API with Existing Integration:**
+```json
+{
+  "tool": "create_model_api",
+  "arguments": {
+    "name": "another-gpt4-api",
+    "integrationConnectionName": "my-openai-integration",
+    "model": "gpt-4-turbo"  // optional model override
+  }
+}
+```
+
+### Benefits
+
+- **Maximum Flexibility**: Choose whether to create new integrations or reuse existing ones
+- **Resource Efficiency**: Multiple resources can share a single integration
+- **Simpler for Agents**: AI agents can work with either mode based on context
+- **Better Organization**: Integrations can be managed separately from resources
+
+## Usage with Claude Desktop
+
+Add the following to your Claude Desktop configuration (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "blaxel": {
+      "command": "/path/to/blaxel-mcp-server",
+      "env": {
+        "BLAXEL_API_KEY": "${env:BLAXEL_API_KEY}",
+        "BLAXEL_WORKSPACE": "${env:BLAXEL_WORKSPACE}"
+      }
+    }
+  }
+}
+```
+
+## Usage with Cursor
+
+Add the following to your Cursor MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "blaxel": {
+      "command": "/path/to/blaxel-mcp-server",
+      "args": ["--toolsets", "all"],
+      "env": {
+        "BLAXEL_API_KEY": "${BLAXEL_API_KEY}",
+        "BLAXEL_WORKSPACE": "${BLAXEL_WORKSPACE}"
+      }
+    }
+  }
+}
+```
+
+## Development
+
+### Project Structure
+
+```
+blaxel-mcp-server/
+├── cmd/
+│   └── blaxel-mcp-server/     # Main application entry point
+├── internal/
+│   ├── config/                # Configuration management
+│   └── tools/                 # Tool implementations
+│       ├── agents/
+│       ├── modelapis/
+│       ├── mcpservers/
+│       ├── sandboxes/
+│       ├── jobs/
+│       ├── integrations/
+│       ├── users/
+│       ├── serviceaccounts/
+│       └── local/
+└── pkg/
+    └── mcp/                   # MCP server implementation
+```
+
+### Running Tests
 
 ```bash
-# Build the TypeScript code
-npm run build
-
-# Run the compiled JavaScript
-npm run prod
+go test ./...
 ```
 
-You can also inspect the MCP server using the official MCP inspector:
+### Building for Different Platforms
 
 ```bash
-npm run inspect
+# Linux
+GOOS=linux GOARCH=amd64 go build -o blaxel-mcp-server-linux ./cmd/blaxel-mcp-server
+
+# macOS
+GOOS=darwin GOARCH=amd64 go build -o blaxel-mcp-server-darwin ./cmd/blaxel-mcp-server
+
+# Windows
+GOOS=windows GOARCH=amd64 go build -o blaxel-mcp-server.exe ./cmd/blaxel-mcp-server
 ```
 
-_Note:_ The development server automatically restarts when you make changes to the source code.
+## Troubleshooting
 
-### Testing
+### Authentication Issues
 
-You can test your MCP function locally:
+If you encounter authentication errors:
+1. Ensure your API key or access token is valid
+2. Check that the workspace name is correct
+3. Verify the API endpoint is reachable
 
-```bash
-# Test with the MCP inspector
-npm run inspect
-```
+### Tool Availability
 
-The MCP tool expects a `firstname` parameter and returns a greeting message.
+If certain tools are not available:
+1. Check if you're running in read-only mode
+2. Verify the toolsets configuration
+3. Ensure you have the necessary permissions in your workspace
 
-### Deployment
+## License
 
-When you are ready to deploy your MCP server:
+MIT License - see LICENSE file for details
 
-```bash
-bl deploy
-```
+## Contributing
 
-This command uses your code and the configuration in `blaxel.toml` to deploy your MCP server as a function on the Blaxel platform.
+Contributions are welcome! Please submit pull requests with:
+- Clear commit messages
+- Updated tests
+- Documentation updates
 
-## 📁 Project Structure
+## Support
 
-- `src/index.ts` - MCP server bootstrap
-- `src/mcp/tools/list/*` - tools for listing resources (agents, model-apis, mcp-servers, sandboxes, jobs, integrations, users, service-accounts)
-- `src/mcp/tools/create/*` - create operations (planned)
-- `src/mcp/tools/delete/*` - delete operations (planned)
-- `src/mcp/resources/*` - MCP resources (planned)
-- `src/mcp/prompts/*` - MCP prompts (planned)
-- `package.json` - scripts and dependencies
-- `tsconfig.json` - TypeScript configuration
-
-## ❓ Troubleshooting
-
-### Common Issues
-
-1. **Blaxel Platform Issues**:
-   - Ensure you're logged in to your workspace: `bl login MY-WORKSPACE`
-   - Verify models are available: `bl get models`
-   - Check that functions exist: `bl get functions`
-
-2. **MCP Server Connection Issues**:
-   - Verify the server starts without errors using `npm run dev`
-   - Check that the MCP inspector can connect using `npm run inspect`
-   - Ensure TypeScript compiles successfully with `npm run build`
-   - Verify WebSocket connections if using Blaxel transport
-
-3. **Dependency and Environment Issues**:
-   - Make sure you have Node.js 18+
-   - Try `npm install` to reinstall dependencies
-   - Check for TypeScript compilation errors
-   - Verify that all required dependencies are installed
-
-For more help, please [submit an issue](https://github.com/blaxel-templates/template-mcp-hello-world-ts/issues) on GitHub.
-
-## 👥 Contributing
-
-Contributions are welcome! Here's how you can contribute:
-
-1. **Fork** the repository
-2. **Create** a feature branch:
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-3. **Commit** your changes:
-   ```bash
-   git commit -m 'Add amazing feature'
-   ```
-4. **Push** to the branch:
-   ```bash
-   git push origin feature/amazing-feature
-   ```
-5. **Submit** a Pull Request
-
-Please make sure to update tests as appropriate and follow the TypeScript code style of the project.
-
-## 🆘 Support
-
-If you need help with this template:
-
-- [Submit an issue](https://github.com/blaxel-templates/template-mcp-hello-world-ts/issues) for bug reports or feature requests
-- Visit the [Blaxel Documentation](https://docs.blaxel.ai) for platform guidance
-- Check the [Model Context Protocol Documentation](https://github.com/modelcontextprotocol/servers) for MCP-specific help
-- Join our [Discord Community](https://discord.gg/G3NqzUPcHP) for real-time assistance
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+For issues and questions:
+- Open an issue on GitHub
+- Contact Blaxel support
+- Check the [Blaxel documentation](https://docs.blaxel.ai)
