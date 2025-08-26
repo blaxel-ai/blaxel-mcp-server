@@ -162,8 +162,16 @@ export BLAXEL_READ_ONLY="true"              # Run in read-only mode
 
 ### Service Account Management
 - `list_service_accounts` - List all service accounts
+- `get_service_account` - Get details of a specific service account
 - `create_service_account` - Create a new service account
+- `update_service_account` - Update a service account's name
 - `delete_service_account` - Delete a service account
+
+### Runtime Execution Tools
+- `run_agent` - Chat with or invoke an agent
+- `run_job` - Trigger or run a job
+- `run_model` - Invoke a model API
+- `run_sandbox` - Execute code in a sandbox environment
 
 ### Local Development Tools
 - `local_create_agent` - Create a new agent project locally

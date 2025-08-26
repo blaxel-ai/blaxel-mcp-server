@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,22 +18,13 @@ type ListModelAPIsRequest struct {
 	Filter string `json:"filter,omitempty"`
 }
 
-type ListModelAPIsResponse struct {
-	ModelAPIs []ModelAPIInfo `json:"model_apis"`
-	Count     int            `json:"count"`
-}
-
-type ModelAPIInfo struct {
-	Name string `json:"name"`
-}
+type ListModelAPIsResponse json.RawMessage
 
 type GetModelAPIRequest struct {
 	Name string `json:"name"`
 }
 
-type GetModelAPIResponse struct {
-	ModelAPI json.RawMessage `json:"model_api"`
-}
+type GetModelAPIResponse json.RawMessage
 
 type CreateModelAPIRequest struct {
 	Name                      string `json:"name"`
@@ -87,8 +78,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Get model API
@@ -115,8 +105,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	if !cfg.ReadOnly {
@@ -208,31 +197,17 @@ func listModelAPIsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponse
 	if models.JSON200 == nil {
 		return nil, fmt.Errorf("no model APIs found")
 	}
-	var filtered []ModelAPIInfo
 
-	for _, model := range *models.JSON200 {
-		if req.Filter != "" {
-			name := ""
-			if model.Metadata != nil && model.Metadata.Name != nil {
-				name = *model.Metadata.Name
-			}
-			if name == "" || !containsString(name, req.Filter) {
-				continue
-			}
-		}
-
-		item := ModelAPIInfo{}
+	// Use generic filter and marshal function
+	jsonData, _ := tools.FilterAndMarshal(models.JSON200, req.Filter, func(model sdk.Model) string {
 		if model.Metadata != nil && model.Metadata.Name != nil {
-			item.Name = *model.Metadata.Name
+			return *model.Metadata.Name
 		}
+		return ""
+	})
 
-		filtered = append(filtered, item)
-	}
-
-	return &ListModelAPIsResponse{
-		ModelAPIs: filtered,
-		Count:     len(filtered),
-	}, nil
+	response := ListModelAPIsResponse(jsonData)
+	return &response, nil
 }
 
 func getModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetModelAPIRequest) (*GetModelAPIResponse, error) {
@@ -249,9 +224,8 @@ func getModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses,
 	}
 
 	jsonData, _ := json.MarshalIndent(*model.JSON200, "", "  ")
-	return &GetModelAPIResponse{
-		ModelAPI: json.RawMessage(jsonData),
-	}, nil
+	response := GetModelAPIResponse(jsonData)
+	return &response, nil
 }
 
 func createModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req CreateModelAPIRequest) (*CreateModelAPIResponse, error) {
@@ -273,25 +247,59 @@ func createModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 	}
 
 	// Handle integration configuration
+	var integrationName string
 	if hasExisting {
 		// Use existing integration connection
 		if req.IntegrationConnectionName == "" {
 			return nil, fmt.Errorf("integrationConnectionName cannot be empty")
 		}
-		connections := sdk.IntegrationConnectionsList{req.IntegrationConnectionName}
-		modelData.Spec.IntegrationConnections = &connections
+		integrationName = req.IntegrationConnectionName
 	} else if hasProvider {
-		// For new integration with provider, we need to create it first, then reference it
-		// For now, return an informative error
-		if req.Provider == "" {
-			return nil, fmt.Errorf("provider cannot be empty")
-		}
-		if !hasApiKey || req.APIKey == "" {
+		if !hasApiKey {
 			return nil, fmt.Errorf("api key is required when specifying provider")
 		}
-		return nil, fmt.Errorf("inline integration creation is not supported. Please create the integration first using 'create_integration', then reference it by name")
+
+		// Generate a unique name for the integration
+		integrationName = fmt.Sprintf("%s-%s-integration", req.Name, req.Provider)
+
+		// Create the integration
+		integrationData := sdk.CreateIntegrationConnectionJSONRequestBody{
+			Metadata: &sdk.Metadata{
+				Name: &integrationName,
+			},
+			Spec: &sdk.IntegrationConnectionSpec{
+				Integration: &req.Provider, // Provider is the integration type
+			},
+		}
+
+		// Add API key to secrets
+		secrets := map[string]string{
+			"apiKey": req.APIKey,
+		}
+		integrationData.Spec.Secret = &secrets
+
+		// Create the integration
+		integrationResp, err := sdkClient.CreateIntegrationConnectionWithResponse(ctx, integrationData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create inline integration: %w", err)
+		}
+
+		if integrationResp.StatusCode() >= 400 {
+			if integrationResp.StatusCode() == 409 {
+				// Integration might already exist, try to use it
+				fmt.Printf("Integration '%s' already exists, will attempt to use it\n", integrationName)
+			} else {
+				return nil, fmt.Errorf("failed to create integration with status %d", integrationResp.StatusCode())
+			}
+		}
 	} else {
-		return nil, fmt.Errorf("must provide integrationConnectionName to reference an existing integration")
+		return nil, fmt.Errorf("must provide either integrationConnectionName to reference an existing integration or provider with apiKey to create a new one")
+	}
+
+	// Set the integration connection on the model
+	if integrationName != "" {
+		connections := sdk.IntegrationConnectionsList{integrationName}
+		modelData.Spec.IntegrationConnections = &connections
 	}
 
 	// Create the model API
@@ -316,14 +324,20 @@ func createModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 	}
 
 	// Add details to result
-	if hasExisting {
-		result.ModelAPI["integrationConnection"] = req.IntegrationConnectionName
-	} else if hasProvider {
-		result.ModelAPI["provider"] = req.Provider
+	if integrationName != "" {
+		result.ModelAPI["integrationConnection"] = integrationName
+		if hasProvider {
+			result.Message = fmt.Sprintf("Model API '%s' created successfully with inline integration '%s'", req.Name, integrationName)
+			result.ModelAPI["provider"] = req.Provider
+		}
 	}
 
 	if req.Model != "" {
 		result.ModelAPI["model"] = req.Model
+	}
+
+	if req.Endpoint != "" {
+		result.ModelAPI["endpoint"] = req.Endpoint
 	}
 
 	return result, nil
@@ -343,8 +357,4 @@ func deleteModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 		Success: true,
 		Message: fmt.Sprintf("Model API '%s' deleted successfully", req.Name),
 	}, nil
-}
-
-func containsString(s, substr string) bool {
-	return len(substr) == 0 || strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }

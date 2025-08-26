@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -19,24 +19,13 @@ type ListAgentsRequest struct {
 	Filter string `json:"filter,omitempty"`
 }
 
-type ListAgentsResponse struct {
-	Agents []AgentInfo `json:"agents"`
-	Count  int         `json:"count"`
-}
-
-type AgentInfo struct {
-	Name        string `json:"name"`
-	Status      string `json:"status,omitempty"`
-	Description string `json:"description,omitempty"`
-}
+type ListAgentsResponse json.RawMessage
 
 type GetAgentRequest struct {
 	Name string `json:"name"`
 }
 
-type GetAgentResponse struct {
-	Agent json.RawMessage `json:"agent"`
-}
+type GetAgentResponse json.RawMessage
 
 type DeleteAgentRequest struct {
 	Name string `json:"name"`
@@ -76,8 +65,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Get agent tool
@@ -104,8 +92,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Delete agent tool (only if not in readonly mode)
@@ -159,42 +146,16 @@ func listAgentsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, 
 	}
 
 	// Apply optional filter
-	var filteredAgents []AgentInfo
-	for _, agent := range agents {
-		// Check if filter matches
-		if req.Filter != "" {
-			name := ""
-			if agent.Metadata != nil && agent.Metadata.Name != nil {
-				name = *agent.Metadata.Name
-			}
-			// Skip if name doesn't contain filter
-			if name == "" || !contains(name, req.Filter) {
-				continue
-			}
-		}
-
-		// Build agent info
-		agentInfo := AgentInfo{}
-
+	// Use generic filter and marshal function
+	jsonData, _ := tools.FilterAndMarshal(&agents, req.Filter, func(agent sdk.Agent) string {
 		if agent.Metadata != nil && agent.Metadata.Name != nil {
-			agentInfo.Name = *agent.Metadata.Name
+			return *agent.Metadata.Name
 		}
+		return ""
+	})
 
-		if agent.Status != nil {
-			agentInfo.Status = *agent.Status
-		}
-
-		if agent.Spec != nil && agent.Spec.Description != nil {
-			agentInfo.Description = *agent.Spec.Description
-		}
-
-		filteredAgents = append(filteredAgents, agentInfo)
-	}
-
-	return &ListAgentsResponse{
-		Agents: filteredAgents,
-		Count:  len(filteredAgents),
-	}, nil
+	response := ListAgentsResponse(jsonData)
+	return &response, nil
 }
 
 func getAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetAgentRequest) (*GetAgentResponse, error) {
@@ -221,9 +182,8 @@ func getAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, re
 		return nil, fmt.Errorf("failed to format agent data: %w", err)
 	}
 
-	return &GetAgentResponse{
-		Agent: json.RawMessage(jsonData),
-	}, nil
+	response := GetAgentResponse(jsonData)
+	return &response, nil
 }
 
 func deleteAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req DeleteAgentRequest) (*DeleteAgentResponse, error) {
@@ -244,9 +204,4 @@ func deleteAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses,
 		Success: true,
 		Message: fmt.Sprintf("Agent '%s' deleted successfully", req.Name),
 	}, nil
-}
-
-// Helper function to check if a string contains a substring (case-insensitive)
-func contains(s, substr string) bool {
-	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }

@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,23 +18,13 @@ type ListServiceAccountsRequest struct {
 	Filter string `json:"filter,omitempty"`
 }
 
-type ListServiceAccountsResponse struct {
-	ServiceAccounts []ServiceAccountInfo `json:"service_accounts"`
-	Count           int                  `json:"count"`
-}
-
-type ServiceAccountInfo struct {
-	Name     string `json:"name"`
-	ClientID string `json:"client_id"`
-}
+type ListServiceAccountsResponse json.RawMessage
 
 type GetServiceAccountRequest struct {
 	ClientID string `json:"clientId"`
 }
 
-type GetServiceAccountResponse struct {
-	ServiceAccount json.RawMessage `json:"service_account"`
-}
+type GetServiceAccountResponse json.RawMessage
 
 type CreateServiceAccountRequest struct {
 	Name string `json:"name"`
@@ -53,6 +43,17 @@ type DeleteServiceAccountRequest struct {
 type DeleteServiceAccountResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
+}
+
+type UpdateServiceAccountRequest struct {
+	ClientID string `json:"clientId"`
+	Name     string `json:"name"`
+}
+
+type UpdateServiceAccountResponse struct {
+	Success        bool                   `json:"success"`
+	Message        string                 `json:"message"`
+	ServiceAccount map[string]interface{} `json:"service_account"`
 }
 
 // RegisterTools registers all service account-related tools
@@ -85,8 +86,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Get service account tool
@@ -113,8 +113,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Only register write operations if not in read-only mode
@@ -174,6 +173,41 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			jsonResult, _ := json.MarshalIndent(result, "", "  ")
 			return mcp.NewToolResultText(string(jsonResult)), nil
 		})
+
+		// Update service account tool
+		updateServiceAccountTool := mcp.NewTool("update_service_account",
+			mcp.WithDescription("Update a service account's name"),
+			mcp.WithString("clientId",
+				mcp.Required(),
+				mcp.Description("Client ID of the service account to update"),
+			),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("New name for the service account"),
+			),
+		)
+
+		s.AddTool(updateServiceAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req UpdateServiceAccountRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.ClientID == "" {
+				return mcp.NewToolResultError("clientId is required"), nil
+			}
+			if req.Name == "" {
+				return mcp.NewToolResultError("name is required"), nil
+			}
+
+			result, err := updateServiceAccountHandler(ctx, sdkClient, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			jsonResult, _ := json.MarshalIndent(result, "", "  ")
+			return mcp.NewToolResultText(string(jsonResult)), nil
+		})
 	}
 }
 
@@ -191,31 +225,26 @@ func listServiceAccountsHandler(ctx context.Context, sdkClient *sdk.ClientWithRe
 		return nil, fmt.Errorf("no service accounts found")
 	}
 
-	var accountList []ServiceAccountInfo
-	for _, account := range *serviceAccounts.JSON200 {
-		accountInfo := ServiceAccountInfo{}
-
-		if account.Name != nil {
-			accountInfo.Name = *account.Name
-		}
-		if account.ClientId != nil {
-			accountInfo.ClientID = *account.ClientId
-		}
-
-		// Apply filter if provided
-		if req.Filter != "" {
-			if !strings.Contains(strings.ToLower(accountInfo.Name), strings.ToLower(req.Filter)) {
-				continue
+	// Service accounts use a different type structure, fall back to manual filtering
+	var result interface{} = serviceAccounts.JSON200
+	if req.Filter != "" {
+		var filtered []interface{}
+		for _, account := range *serviceAccounts.JSON200 {
+			name := ""
+			if account.Name != nil {
+				name = *account.Name
+			}
+			if name != "" && tools.ContainsString(name, req.Filter) {
+				filtered = append(filtered, account)
 			}
 		}
-
-		accountList = append(accountList, accountInfo)
+		result = filtered
 	}
 
-	return &ListServiceAccountsResponse{
-		ServiceAccounts: accountList,
-		Count:           len(accountList),
-	}, nil
+	jsonData, _ := json.MarshalIndent(result, "", "  ")
+
+	response := ListServiceAccountsResponse(jsonData)
+	return &response, nil
 }
 
 func getServiceAccountHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetServiceAccountRequest) (*GetServiceAccountResponse, error) {
@@ -236,9 +265,8 @@ func getServiceAccountHandler(ctx context.Context, sdkClient *sdk.ClientWithResp
 	for _, account := range *serviceAccounts.JSON200 {
 		if account.ClientId != nil && *account.ClientId == req.ClientID {
 			jsonData, _ := json.MarshalIndent(account, "", "  ")
-			return &GetServiceAccountResponse{
-				ServiceAccount: json.RawMessage(jsonData),
-			}, nil
+			response := GetServiceAccountResponse(jsonData)
+			return &response, nil
 		}
 	}
 
@@ -296,5 +324,62 @@ func deleteServiceAccountHandler(ctx context.Context, sdkClient *sdk.ClientWithR
 	return &DeleteServiceAccountResponse{
 		Success: true,
 		Message: fmt.Sprintf("Service account with client ID '%s' deleted successfully", req.ClientID),
+	}, nil
+}
+
+func updateServiceAccountHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req UpdateServiceAccountRequest) (*UpdateServiceAccountResponse, error) {
+	if sdkClient == nil {
+		return nil, fmt.Errorf("SDK client not initialized")
+	}
+
+	// Build update request
+	updateData := sdk.UpdateWorkspaceServiceAccountJSONRequestBody{
+		Name: &req.Name,
+	}
+
+	// Update the service account
+	resp, err := sdkClient.UpdateWorkspaceServiceAccountWithResponse(ctx, req.ClientID, updateData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update service account: %w", err)
+	}
+
+	if resp.StatusCode() != 200 {
+		return nil, fmt.Errorf("failed to update service account with status %d", resp.StatusCode())
+	}
+
+	// Get updated details
+	serviceAccounts, err := sdkClient.GetWorkspaceServiceAccountsWithResponse(ctx)
+	if err != nil {
+		return &UpdateServiceAccountResponse{
+			Success: true,
+			Message: fmt.Sprintf("Service account '%s' updated successfully", req.ClientID),
+			ServiceAccount: map[string]interface{}{
+				"clientId": req.ClientID,
+				"name":     req.Name,
+			},
+		}, nil
+	}
+
+	// Find the updated account
+	for _, account := range *serviceAccounts.JSON200 {
+		if account.ClientId != nil && *account.ClientId == req.ClientID {
+			return &UpdateServiceAccountResponse{
+				Success: true,
+				Message: fmt.Sprintf("Service account '%s' updated successfully", req.ClientID),
+				ServiceAccount: map[string]interface{}{
+					"clientId": req.ClientID,
+					"name":     req.Name,
+				},
+			}, nil
+		}
+	}
+
+	return &UpdateServiceAccountResponse{
+		Success: true,
+		Message: fmt.Sprintf("Service account '%s' updated successfully", req.ClientID),
+		ServiceAccount: map[string]interface{}{
+			"clientId": req.ClientID,
+			"name":     req.Name,
+		},
 	}, nil
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -19,24 +20,13 @@ type ListJobsRequest struct {
 	Status string `json:"status,omitempty"`
 }
 
-type ListJobsResponse struct {
-	Jobs  []JobInfo `json:"jobs"`
-	Count int       `json:"count"`
-}
-
-type JobInfo struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
-}
+type ListJobsResponse json.RawMessage
 
 type GetJobRequest struct {
 	ID string `json:"id"`
 }
 
-type GetJobResponse struct {
-	Job json.RawMessage `json:"job"`
-}
+type GetJobResponse json.RawMessage
 
 type CreateJobRequest struct {
 	Name        string `json:"name"`
@@ -88,8 +78,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Get job tool
@@ -116,8 +105,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Delete job tool (only if not in readonly mode)
@@ -170,42 +158,16 @@ func listJobsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, re
 		jobs = *resp.JSON200
 	}
 
-	// Apply optional status filter
-	statusFilter := req.Status
-
-	var filteredJobs []JobInfo
-	for _, job := range jobs {
-		// Check if status filter matches
-		if statusFilter != "" {
-			status := ""
-			if job.Status != nil {
-				status = *job.Status
-			}
-			// Skip if status doesn't match filter
-			if status == "" || !strings.EqualFold(status, statusFilter) {
-				continue
-			}
+	// Use generic filter and marshal function (status filter instead of name filter)
+	jsonData, _ := tools.FilterAndMarshal(&jobs, req.Status, func(job sdk.Job) string {
+		if job.Status != nil && strings.EqualFold(*job.Status, req.Status) {
+			return "match" // Return non-empty to include this item
 		}
+		return ""
+	})
 
-		// Build job info
-		jobInfo := JobInfo{}
-
-		if job.Metadata != nil && job.Metadata.Name != nil {
-			jobInfo.ID = *job.Metadata.Name
-			jobInfo.Name = *job.Metadata.Name
-		}
-
-		if job.Status != nil {
-			jobInfo.Status = *job.Status
-		}
-
-		filteredJobs = append(filteredJobs, jobInfo)
-	}
-
-	return &ListJobsResponse{
-		Jobs:  filteredJobs,
-		Count: len(filteredJobs),
-	}, nil
+	response := ListJobsResponse(jsonData)
+	return &response, nil
 }
 
 func getJobHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetJobRequest) (*GetJobResponse, error) {
@@ -226,23 +188,14 @@ func getJobHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req 
 		return nil, fmt.Errorf("job not found")
 	}
 
-	// SDK bug workaround: GetJobResponse returns *Model instead of *Job
-	// Convert the Model to Job (they have similar structure)
-	if model, ok := interface{}(resp.JSON200).(*sdk.Model); ok {
-		job := &sdk.Job{
-			Metadata: model.Metadata,
-			Spec:     &sdk.JobSpec{
-				// Convert ModelSpec to JobSpec if needed
-			},
-			Status: model.Status,
-		}
-		jsonData, _ := json.MarshalIndent(job, "", "  ")
-		return &GetJobResponse{
-			Job: json.RawMessage(jsonData),
-		}, nil
+	// Return the job as JSON
+	jsonData, err := json.MarshalIndent(*resp.JSON200, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal job data: %w", err)
 	}
 
-	return nil, fmt.Errorf("unexpected response type")
+	response := GetJobResponse(jsonData)
+	return &response, nil
 }
 
 func deleteJobHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req DeleteJobRequest) (*DeleteJobResponse, error) {

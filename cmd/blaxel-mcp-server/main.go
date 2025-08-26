@@ -13,6 +13,7 @@ import (
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/local"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/mcpservers"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/modelapis"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/runtime"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/sandboxes"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/serviceaccounts"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/users"
@@ -106,6 +107,11 @@ func registerTools(mcp *server.MCPServer, cfg *config.Config, toolsets string) e
 
 	if enabledToolsets["all"] || enabledToolsets["local"] {
 		local.RegisterTools(mcp, cfg)
+	}
+
+	// Register runtime execution tools (unless in read-only mode)
+	if !cfg.ReadOnly && (enabledToolsets["all"] || enabledToolsets["runtime"]) {
+		runtime.RegisterTools(mcp, cfg)
 	}
 
 	return nil

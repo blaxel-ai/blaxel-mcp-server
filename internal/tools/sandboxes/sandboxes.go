@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,23 +18,13 @@ type ListSandboxesRequest struct {
 	Filter string `json:"filter,omitempty"`
 }
 
-type ListSandboxesResponse struct {
-	Sandboxes []SandboxInfo `json:"sandboxes"`
-	Count     int           `json:"count"`
-}
-
-type SandboxInfo struct {
-	Name string `json:"name"`
-}
+type ListSandboxesResponse json.RawMessage
 
 type GetSandboxRequest struct {
 	Name string `json:"name"`
 }
 
-type GetSandboxResponse struct {
-	Sandbox json.RawMessage `json:"sandbox"`
-	Name    string          `json:"name"`
-}
+type GetSandboxResponse json.RawMessage
 
 type CreateSandboxRequest struct {
 	Name   string  `json:"name"`
@@ -86,8 +76,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Get sandbox tool
@@ -114,8 +103,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Only register write operations if not in read-only mode
@@ -196,34 +184,17 @@ func listSandboxesHandler(ctx context.Context, sdkClient *sdk.ClientWithResponse
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sandboxes: %w", err)
 	}
-	var filteredSandboxes []SandboxInfo
 
-	for _, sandbox := range *sandboxes.JSON200 {
-		// Check if filter matches
-		if req.Filter != "" {
-			name := ""
-			if sandbox.Metadata != nil && sandbox.Metadata.Name != nil {
-				name = *sandbox.Metadata.Name
-			}
-			// Skip if name doesn't contain filter
-			if name == "" || !containsString(name, req.Filter) {
-				continue
-			}
-		}
-
-		// Build sandbox info
-		sandboxInfo := SandboxInfo{}
+	// Use generic filter and marshal function
+	jsonData, _ := tools.FilterAndMarshal(sandboxes.JSON200, req.Filter, func(sandbox sdk.Sandbox) string {
 		if sandbox.Metadata != nil && sandbox.Metadata.Name != nil {
-			sandboxInfo.Name = *sandbox.Metadata.Name
+			return *sandbox.Metadata.Name
 		}
+		return ""
+	})
 
-		filteredSandboxes = append(filteredSandboxes, sandboxInfo)
-	}
-
-	return &ListSandboxesResponse{
-		Sandboxes: filteredSandboxes,
-		Count:     len(filteredSandboxes),
-	}, nil
+	response := ListSandboxesResponse(jsonData)
+	return &response, nil
 }
 
 func getSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetSandboxRequest) (*GetSandboxResponse, error) {
@@ -240,11 +211,8 @@ func getSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, 
 	}
 
 	jsonData, _ := json.MarshalIndent(*sandbox.JSON200, "", "  ")
-
-	return &GetSandboxResponse{
-		Sandbox: json.RawMessage(jsonData),
-		Name:    req.Name,
-	}, nil
+	response := GetSandboxResponse(jsonData)
+	return &response, nil
 }
 
 func createSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req CreateSandboxRequest) (*CreateSandboxResponse, error) {
@@ -319,6 +287,3 @@ func deleteSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponse
 }
 
 // Helper function to check if a string contains a substring (case-insensitive)
-func containsString(s, substr string) bool {
-	return len(substr) == 0 || (len(s) >= len(substr) && strings.Contains(strings.ToLower(s), strings.ToLower(substr)))
-}

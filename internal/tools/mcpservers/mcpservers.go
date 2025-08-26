@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,22 +18,13 @@ type ListMCPServersRequest struct {
 	Filter string `json:"filter,omitempty"`
 }
 
-type ListMCPServersResponse struct {
-	MCPServers []MCPServerInfo `json:"mcp_servers"`
-	Count      int             `json:"count"`
-}
-
-type MCPServerInfo struct {
-	Name string `json:"name"`
-}
+type ListMCPServersResponse json.RawMessage
 
 type GetMCPServerRequest struct {
 	Name string `json:"name"`
 }
 
-type GetMCPServerResponse struct {
-	MCPServer json.RawMessage `json:"mcp_server"`
-}
+type GetMCPServerResponse json.RawMessage
 
 type CreateMCPServerRequest struct {
 	Name                      string            `json:"name"`
@@ -86,8 +77,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Get MCP server
@@ -114,8 +104,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	if !cfg.ReadOnly {
@@ -201,31 +190,17 @@ func listMCPServersHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 	if servers.JSON200 == nil {
 		return nil, fmt.Errorf("no MCP servers found")
 	}
-	var filtered []MCPServerInfo
 
-	for _, server := range *servers.JSON200 {
-		if req.Filter != "" {
-			name := ""
-			if server.Metadata != nil && server.Metadata.Name != nil {
-				name = *server.Metadata.Name
-			}
-			if name == "" || !containsString(name, req.Filter) {
-				continue
-			}
-		}
-
-		item := MCPServerInfo{}
+	// Use generic filter and marshal function
+	jsonData, _ := tools.FilterAndMarshal(servers.JSON200, req.Filter, func(server sdk.Function) string {
 		if server.Metadata != nil && server.Metadata.Name != nil {
-			item.Name = *server.Metadata.Name
+			return *server.Metadata.Name
 		}
+		return ""
+	})
 
-		filtered = append(filtered, item)
-	}
-
-	return &ListMCPServersResponse{
-		MCPServers: filtered,
-		Count:      len(filtered),
-	}, nil
+	response := ListMCPServersResponse(jsonData)
+	return &response, nil
 }
 
 func getMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetMCPServerRequest) (*GetMCPServerResponse, error) {
@@ -242,9 +217,8 @@ func getMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses
 	}
 
 	jsonData, _ := json.MarshalIndent(*server.JSON200, "", "  ")
-	return &GetMCPServerResponse{
-		MCPServer: json.RawMessage(jsonData),
-	}, nil
+	response := GetMCPServerResponse(jsonData)
+	return &response, nil
 }
 
 func createMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req CreateMCPServerRequest) (*CreateMCPServerResponse, error) {
@@ -272,20 +246,62 @@ func createMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithRespon
 	}
 
 	// Handle integration configuration
+	var integrationName string
 	if hasExisting {
 		// Use existing integration connection
 		if req.IntegrationConnectionName == "" {
 			return nil, fmt.Errorf("integrationConnectionName cannot be empty")
 		}
-		connections := sdk.IntegrationConnectionsList{req.IntegrationConnectionName}
-		functionData.Spec.IntegrationConnections = &connections
+		integrationName = req.IntegrationConnectionName
 	} else if hasNewType {
-		// For new integration, we need to create it first, then reference it
-		// For now, return an informative error
-		return nil, fmt.Errorf("inline integration creation is not supported. Please create the integration first using 'create_integration', then reference it by name")
-	} else {
-		// No integration specified - this might be valid for some MCP servers
-		// Let the API decide if it's required
+		// Create inline integration for the MCP server
+		if req.IntegrationType == "" {
+			return nil, fmt.Errorf("integrationType cannot be empty")
+		}
+
+		// Generate a unique name for the integration
+		integrationName = fmt.Sprintf("%s-%s-integration", req.Name, req.IntegrationType)
+
+		// Create the integration
+		integrationData := sdk.CreateIntegrationConnectionJSONRequestBody{
+			Metadata: &sdk.Metadata{
+				Name: &integrationName,
+			},
+			Spec: &sdk.IntegrationConnectionSpec{
+				Integration: &req.IntegrationType,
+			},
+		}
+
+		// Add secrets if provided
+		if len(req.Secret) > 0 {
+			integrationData.Spec.Secret = &req.Secret
+		}
+
+		// Add config if provided
+		if len(req.Config) > 0 {
+			integrationData.Spec.Config = &req.Config
+		}
+
+		// Create the integration
+		integrationResp, err := sdkClient.CreateIntegrationConnectionWithResponse(ctx, integrationData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create inline integration: %w", err)
+		}
+
+		if integrationResp.StatusCode() >= 400 {
+			if integrationResp.StatusCode() == 409 {
+				// Integration might already exist, try to use it
+				fmt.Printf("Integration '%s' already exists, will attempt to use it\n", integrationName)
+			} else {
+				return nil, fmt.Errorf("failed to create integration with status %d", integrationResp.StatusCode())
+			}
+		}
+	}
+
+	// Set the integration connection on the MCP server
+	if integrationName != "" {
+		connections := sdk.IntegrationConnectionsList{integrationName}
+		functionData.Spec.IntegrationConnections = &connections
 	}
 
 	// Create the MCP server
@@ -310,10 +326,12 @@ func createMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithRespon
 	}
 
 	// Add integration details to result
-	if hasExisting {
-		result.MCPServer["integrationConnection"] = req.IntegrationConnectionName
-	} else if hasNewType {
-		result.MCPServer["integrationType"] = req.IntegrationType
+	if integrationName != "" {
+		result.MCPServer["integrationConnection"] = integrationName
+		if hasNewType {
+			result.Message = fmt.Sprintf("MCP server '%s' created successfully with inline integration '%s'", req.Name, integrationName)
+			result.MCPServer["integrationType"] = req.IntegrationType
+		}
 	}
 
 	return result, nil
@@ -333,8 +351,4 @@ func deleteMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithRespon
 		Success: true,
 		Message: fmt.Sprintf("MCP server '%s' deleted successfully", req.Name),
 	}, nil
-}
-
-func containsString(s, substr string) bool {
-	return len(substr) == 0 || strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }

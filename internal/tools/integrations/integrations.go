@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,24 +18,13 @@ type ListIntegrationsRequest struct {
 	Filter string `json:"filter,omitempty"`
 }
 
-type ListIntegrationsResponse struct {
-	Integrations []IntegrationInfo `json:"integrations"`
-	Count        int               `json:"count"`
-}
-
-type IntegrationInfo struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-}
+type ListIntegrationsResponse json.RawMessage
 
 type GetIntegrationRequest struct {
 	Name string `json:"name"`
 }
 
-type GetIntegrationResponse struct {
-	Integration json.RawMessage `json:"integration"`
-	Name        string          `json:"name"`
-}
+type GetIntegrationResponse json.RawMessage
 
 type CreateIntegrationRequest struct {
 	Name            string            `json:"name"`
@@ -87,8 +76,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	// Get integration
@@ -115,8 +103,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		jsonResult, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(jsonResult)), nil
+		return mcp.NewToolResultText(string(*result)), nil
 	})
 
 	if !cfg.ReadOnly {
@@ -203,36 +190,17 @@ func listIntegrationsHandler(ctx context.Context, sdkClient *sdk.ClientWithRespo
 	if integrations.JSON200 == nil {
 		return nil, fmt.Errorf("no integrations found")
 	}
-	var filtered []IntegrationInfo
 
-	for _, integration := range *integrations.JSON200 {
-		if req.Filter != "" {
-			name := ""
-			if integration.Metadata != nil && integration.Metadata.Name != nil {
-				name = *integration.Metadata.Name
-			}
-			if name == "" || !containsString(name, req.Filter) {
-				continue
-			}
-		}
-
-		item := IntegrationInfo{}
-
+	// Use generic filter and marshal function
+	jsonData, _ := tools.FilterAndMarshal(integrations.JSON200, req.Filter, func(integration sdk.IntegrationConnection) string {
 		if integration.Metadata != nil && integration.Metadata.Name != nil {
-			item.Name = *integration.Metadata.Name
+			return *integration.Metadata.Name
 		}
+		return ""
+	})
 
-		if integration.Spec != nil && integration.Spec.Integration != nil {
-			item.Type = *integration.Spec.Integration
-		}
-
-		filtered = append(filtered, item)
-	}
-
-	return &ListIntegrationsResponse{
-		Integrations: filtered,
-		Count:        len(filtered),
-	}, nil
+	response := ListIntegrationsResponse(jsonData)
+	return &response, nil
 }
 
 func getIntegrationHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetIntegrationRequest) (*GetIntegrationResponse, error) {
@@ -249,10 +217,8 @@ func getIntegrationHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 	}
 
 	jsonData, _ := json.MarshalIndent(*integration.JSON200, "", "  ")
-	return &GetIntegrationResponse{
-		Integration: json.RawMessage(jsonData),
-		Name:        req.Name,
-	}, nil
+	response := GetIntegrationResponse(jsonData)
+	return &response, nil
 }
 
 func createIntegrationHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req CreateIntegrationRequest) (*CreateIntegrationResponse, error) {
@@ -316,8 +282,4 @@ func deleteIntegrationHandler(ctx context.Context, sdkClient *sdk.ClientWithResp
 		Success: true,
 		Message: fmt.Sprintf("Integration '%s' deleted successfully", req.Name),
 	}, nil
-}
-
-func containsString(s, substr string) bool {
-	return len(substr) == 0 || strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
