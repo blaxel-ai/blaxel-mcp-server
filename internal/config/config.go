@@ -7,39 +7,37 @@ import (
 
 // Config holds the configuration for the MCP server
 type Config struct {
-	// API configuration
-	APIKey      string
 	APIEndpoint string
+	RunEndpoint string
 	Workspace   string
 
 	// Server configuration
 	ReadOnly bool
 	Debug    bool
-
-	// Authentication
-	AccessToken string
 }
 
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
-	cfg := &Config{
-		APIKey:      os.Getenv("BLAXEL_API_KEY"),
-		APIEndpoint: getEnvOrDefault("BLAXEL_API_ENDPOINT", "https://api.blaxel.ai"),
-		Workspace:   os.Getenv("BLAXEL_WORKSPACE"),
-		AccessToken: os.Getenv("BLAXEL_ACCESS_TOKEN"),
-		Debug:       os.Getenv("BLAXEL_DEBUG") == "true",
-		ReadOnly:    os.Getenv("BLAXEL_READ_ONLY") == "true",
+	// Check for BL_ENV to determine environment (like the CLI does)
+	env := os.Getenv("BL_ENV")
+
+	// Default endpoints
+	apiEndpoint := "https://api.blaxel.ai/v0"
+	runEndpoint := "https://run.blaxel.ai"
+
+	// Adjust endpoints based on environment
+	switch env {
+	case "dev":
+		apiEndpoint = "https://api.blaxel.dev/v0"
+		runEndpoint = "https://run.blaxel.dev"
 	}
 
-	// Check for legacy environment variables
-	if cfg.APIKey == "" {
-		cfg.APIKey = os.Getenv("BL_API_KEY")
-	}
-	if cfg.Workspace == "" {
-		cfg.Workspace = os.Getenv("BL_WORKSPACE")
-	}
-	if cfg.AccessToken == "" {
-		cfg.AccessToken = os.Getenv("BL_ACCESS_TOKEN")
+	cfg := &Config{
+		APIEndpoint: getEnvOrDefault("BL_API_ENDPOINT", apiEndpoint),
+		RunEndpoint: getEnvOrDefault("BL_RUN_SERVER", runEndpoint),
+		Workspace:   os.Getenv("BL_WORKSPACE"),
+		Debug:       os.Getenv("BL_DEBUG") == "true",
+		ReadOnly:    os.Getenv("BL_READ_ONLY") == "true",
 	}
 
 	return cfg, nil

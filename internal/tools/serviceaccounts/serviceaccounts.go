@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/logger"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -62,7 +64,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	sdkClient, err := client.NewSDKClient(cfg)
 	if err != nil {
 		// Just log the error or handle it gracefully
-		fmt.Printf("Failed to initialize SDK client: %v\n", err)
+		logger.Warnf("Failed to initialize SDK client: %v", err)
 		return
 	}
 
@@ -225,23 +227,52 @@ func listServiceAccountsHandler(ctx context.Context, sdkClient *sdk.ClientWithRe
 		return nil, fmt.Errorf("no service accounts found")
 	}
 
-	// Service accounts use a different type structure, fall back to manual filtering
-	var result interface{} = serviceAccounts.JSON200
-	if req.Filter != "" {
-		var filtered []interface{}
-		for _, account := range *serviceAccounts.JSON200 {
-			name := ""
-			if account.Name != nil {
-				name = *account.Name
-			}
-			if name != "" && tools.ContainsString(name, req.Filter) {
-				filtered = append(filtered, account)
+	// Convert service accounts for formatting
+	var formattedResult strings.Builder
+	formattedResult.WriteString(fmt.Sprintf("Found %d service account(s):\n\n", len(*serviceAccounts.JSON200)))
+
+	count := 0
+	for _, account := range *serviceAccounts.JSON200 {
+		// Apply filter if requested
+		if req.Filter != "" {
+			if account.Name == nil || !tools.ContainsString(*account.Name, req.Filter) {
+				continue
 			}
 		}
-		result = filtered
+		count++
+
+		formattedResult.WriteString(fmt.Sprintf("Service Account #%d:\n", count))
+
+		if account.Name != nil {
+			formattedResult.WriteString(fmt.Sprintf("  Name: %s\n", *account.Name))
+		}
+
+		if account.ClientId != nil {
+			formattedResult.WriteString(fmt.Sprintf("  Client ID: %s\n", *account.ClientId))
+		}
+
+		if account.Description != nil && *account.Description != "" {
+			formattedResult.WriteString(fmt.Sprintf("  Description: %s\n", *account.Description))
+		}
+
+		if account.CreatedAt != nil {
+			formattedResult.WriteString(fmt.Sprintf("  Created: %s\n", *account.CreatedAt))
+		}
+
+		formattedResult.WriteString("\n")
 	}
 
-	jsonData, _ := json.MarshalIndent(result, "", "  ")
+	if count == 0 && req.Filter != "" {
+		formattedResult.Reset()
+		formattedResult.WriteString(fmt.Sprintf("No service accounts found matching filter: %s", req.Filter))
+	}
+
+	// Format the service accounts using the new formatter
+	formatted := formattedResult.String()
+	jsonData, err := json.Marshal(formatted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal formatted service accounts: %w", err)
+	}
 
 	response := ListServiceAccountsResponse(jsonData)
 	return &response, nil

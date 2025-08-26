@@ -274,17 +274,9 @@ func TestListTools(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to call list_agents: %v", err)
 		}
-
 		// Check if the tool returned an error
 		isError, errorMsg := checkToolError(result)
 		if isError {
-			// If using test credentials, API calls will fail
-			if strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
-				strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") ||
-				strings.Contains(errorMsg, "404") || strings.Contains(errorMsg, "not found") {
-				t.Logf("API call failed as expected with test credentials: %s", errorMsg)
-				return
-			}
 			t.Fatalf("Unexpected error from list_agents: %s", errorMsg)
 		}
 

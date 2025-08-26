@@ -9,9 +9,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// TestMain runs before all tests and loads environment variables
+func TestMain(m *testing.M) {
+	// Load .env file from the project root (parent directory of e2e)
+	envPath := filepath.Join("..", ".env")
+	if err := godotenv.Load(envPath); err != nil {
+		// It's okay if .env doesn't exist, we might use actual env vars
+		fmt.Printf("Note: Could not load .env file from %s: %v\n", envPath, err)
+	}
+
+	os.Exit(m.Run())
+}
 
 // MCPTestClient wraps the official mcp-go client for testing
 type MCPTestClient struct {
@@ -106,8 +119,8 @@ func (c *MCPTestClient) Close() {
 // Helper function to create test environment
 func testEnv() map[string]string {
 	env := map[string]string{
-		"BLAXEL_API_KEY":   getEnvOrDefault("BLAXEL_API_KEY", "test-key"),
-		"BLAXEL_WORKSPACE": getEnvOrDefault("BLAXEL_WORKSPACE", "test-workspace"),
+		"BL_API_KEY":   getEnvOrDefault("BL_API_KEY", "test-key"),
+		"BL_WORKSPACE": getEnvOrDefault("BL_WORKSPACE", "test-workspace"),
 	}
 	return env
 }

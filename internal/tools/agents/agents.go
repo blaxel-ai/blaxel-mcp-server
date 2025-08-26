@@ -146,13 +146,23 @@ func listAgentsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, 
 	}
 
 	// Apply optional filter
-	// Use generic filter and marshal function
-	jsonData, _ := tools.FilterAndMarshal(&agents, req.Filter, func(agent sdk.Agent) string {
-		if agent.Metadata != nil && agent.Metadata.Name != nil {
-			return *agent.Metadata.Name
+	if req.Filter != "" {
+		var filtered []sdk.Agent
+		for _, agent := range agents {
+			if agent.Metadata != nil && agent.Metadata.Name != nil &&
+				tools.ContainsString(*agent.Metadata.Name, req.Filter) {
+				filtered = append(filtered, agent)
+			}
 		}
-		return ""
-	})
+		agents = filtered
+	}
+
+	// Format the agents using the new formatter
+	formatted := tools.FormatAgents(agents)
+	jsonData, err := json.Marshal(formatted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal formatted agents: %w", err)
+	}
 
 	response := ListAgentsResponse(jsonData)
 	return &response, nil

@@ -158,13 +158,23 @@ func listJobsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, re
 		jobs = *resp.JSON200
 	}
 
-	// Use generic filter and marshal function (status filter instead of name filter)
-	jsonData, _ := tools.FilterAndMarshal(&jobs, req.Status, func(job sdk.Job) string {
-		if job.Status != nil && strings.EqualFold(*job.Status, req.Status) {
-			return "match" // Return non-empty to include this item
+	// Apply filter (on status in this case)
+	if req.Status != "" {
+		var filtered []sdk.Job
+		for _, job := range jobs {
+			if job.Status != nil && strings.EqualFold(*job.Status, req.Status) {
+				filtered = append(filtered, job)
+			}
 		}
-		return ""
-	})
+		jobs = filtered
+	}
+
+	// Format the jobs using the new formatter
+	formatted := tools.FormatJobs(jobs)
+	jsonData, err := json.Marshal(formatted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal formatted jobs: %w", err)
+	}
 
 	response := ListJobsResponse(jsonData)
 	return &response, nil

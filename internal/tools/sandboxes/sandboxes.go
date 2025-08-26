@@ -177,21 +177,34 @@ func listSandboxesHandler(ctx context.Context, sdkClient *sdk.ClientWithResponse
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	sandboxes, err := sdkClient.ListSandboxesWithResponse(ctx)
-	if sandboxes.JSON200 == nil {
-		return nil, fmt.Errorf("no sandboxes found")
-	}
+	resp, err := sdkClient.ListSandboxesWithResponse(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sandboxes: %w", err)
 	}
 
-	// Use generic filter and marshal function
-	jsonData, _ := tools.FilterAndMarshal(sandboxes.JSON200, req.Filter, func(sandbox sdk.Sandbox) string {
-		if sandbox.Metadata != nil && sandbox.Metadata.Name != nil {
-			return *sandbox.Metadata.Name
+	sandboxes := []sdk.Sandbox{}
+	if resp.JSON200 != nil {
+		sandboxes = *resp.JSON200
+	}
+
+	// Apply filter if requested
+	if req.Filter != "" {
+		var filtered []sdk.Sandbox
+		for _, sandbox := range sandboxes {
+			if sandbox.Metadata != nil && sandbox.Metadata.Name != nil &&
+				tools.ContainsString(*sandbox.Metadata.Name, req.Filter) {
+				filtered = append(filtered, sandbox)
+			}
 		}
-		return ""
-	})
+		sandboxes = filtered
+	}
+
+	// Format the sandboxes using the new formatter
+	formatted := tools.FormatSandboxes(sandboxes)
+	jsonData, err := json.Marshal(formatted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal formatted sandboxes: %w", err)
+	}
 
 	response := ListSandboxesResponse(jsonData)
 	return &response, nil

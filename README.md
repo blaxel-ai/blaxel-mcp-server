@@ -13,8 +13,8 @@ This implementation follows the same pattern as the [GitHub MCP Server](https://
 make build
 
 # Run the server
-export BLAXEL_API_KEY="your-api-key"
-export BLAXEL_WORKSPACE="your-workspace"
+export BL_API_KEY="your-api-key"
+export BL_WORKSPACE="your-workspace"
 ./build/blaxel-mcp-server
 
 # Test the server
@@ -80,18 +80,48 @@ go build -o blaxel-mcp-server ./cmd/blaxel-mcp-server
 
 ## Configuration
 
-### Environment Variables
+The MCP server uses the same authentication approach as the Blaxel CLI toolkit, providing multiple ways to authenticate:
+
+### Authentication Methods (in priority order)
+
+1. **Blaxel CLI Configuration** (Recommended - Works exactly like the CLI!)
+   ```bash
+   # If you've already logged in with the Blaxel CLI:
+   bl login <workspace>
+
+   # The MCP server will automatically use the same credentials
+   # No environment variables needed - it just works!
+   ./blaxel-mcp-server
+   ```
+
+2. **Environment Variables** (Optional override)
+   ```bash
+   # Override specific settings if needed
+   export BL_API_KEY="your-api-key"        # API Key authentication
+   export BL_WORKSPACE="your-workspace"    # Target workspace
+   ```
+
+3. **.env File** (for local development)
+   ```bash
+   # Create a .env file in your project root
+   echo "BL_API_KEY=your-api-key" >> .env
+   echo "BL_WORKSPACE=your-workspace" >> .env
+   # The server automatically loads it on startup
+   ```
+
+### Server Configuration
 
 ```bash
-# Authentication (choose one method)
-export BLAXEL_API_KEY="your-api-key"        # API Key authentication
-export BLAXEL_ACCESS_TOKEN="your-token"     # Access token authentication
+# Environment selection
+export BL_ENV="prod"                        # Options: prod (default), dev, local
 
-# Optional configuration
-export BLAXEL_WORKSPACE="your-workspace"    # Target workspace
-export BLAXEL_API_ENDPOINT="https://api.blaxel.ai"  # API endpoint (default: https://api.blaxel.ai)
-export BLAXEL_DEBUG="true"                  # Enable debug logging
-export BLAXEL_READ_ONLY="true"              # Run in read-only mode
+# Endpoint configuration (auto-configured based on BL_ENV)
+export BL_API_ENDPOINT="https://api.blaxel.ai"  # API endpoint
+export BL_RUN_SERVER="https://run.blaxel.ai"    # Runtime server endpoint
+
+# Operational settings
+export BL_DEBUG="true"                  # Enable debug logging
+export BL_READ_ONLY="true"              # Run in read-only mode
 ```
 
 ### Command Line Flags
@@ -277,8 +307,8 @@ Add the following to your Claude Desktop configuration (`claude_desktop_config.j
     "blaxel": {
       "command": "/path/to/blaxel-mcp-server",
       "env": {
-        "BLAXEL_API_KEY": "${env:BLAXEL_API_KEY}",
-        "BLAXEL_WORKSPACE": "${env:BLAXEL_WORKSPACE}"
+        "BL_API_KEY": "${env:BL_API_KEY}",
+        "BL_WORKSPACE": "${env:BL_WORKSPACE}"
       }
     }
   }
@@ -296,8 +326,8 @@ Add the following to your Cursor MCP settings:
       "command": "/path/to/blaxel-mcp-server",
       "args": ["--toolsets", "all"],
       "env": {
-        "BLAXEL_API_KEY": "${BLAXEL_API_KEY}",
-        "BLAXEL_WORKSPACE": "${BLAXEL_WORKSPACE}"
+        "BL_API_KEY": "${BL_API_KEY}",
+        "BL_WORKSPACE": "${BL_WORKSPACE}"
       }
     }
   }

@@ -12,10 +12,22 @@ make build
 ```
 
 2. Set environment variables (optional, will use test defaults):
+
+**Option A: Using .env file (recommended)**
+Create a `.env` file in the project root:
 ```bash
-export BLAXEL_API_KEY="your-api-key"
-export BLAXEL_WORKSPACE="your-workspace"
+# .env file in project root
+BL_API_KEY=your-api-key
+BL_WORKSPACE=your-workspace
 ```
+
+**Option B: Export environment variables**
+```bash
+export BL_API_KEY="your-api-key"
+export BL_WORKSPACE="your-workspace"
+```
+
+The tests will automatically load the `.env` file if it exists.
 
 ### Running Tests
 

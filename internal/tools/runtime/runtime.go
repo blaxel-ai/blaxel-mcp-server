@@ -9,6 +9,7 @@ import (
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/logger"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -48,7 +49,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	// Initialize SDK client
 	sdkClient, err := client.NewSDKClient(cfg)
 	if err != nil {
-		fmt.Printf("Warning: Failed to initialize SDK client: %v\n", err)
+		logger.Warnf("Failed to initialize SDK client: %v", err)
 	}
 
 	// Run/Chat with Agent

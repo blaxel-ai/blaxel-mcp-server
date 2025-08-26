@@ -3,10 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/logger"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/agents"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/integrations"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/jobs"
@@ -17,6 +17,7 @@ import (
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/sandboxes"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/serviceaccounts"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/users"
+	"github.com/joho/godotenv"
 	"github.com/mark3labs/mcp-go/server"
 )
 
@@ -27,22 +28,40 @@ var (
 )
 
 func main() {
-	// Parse command-line flags
+	// Parse command-line flags first
 	versionFlag := flag.Bool("version", false, "Print version information")
 	readOnlyFlag := flag.Bool("read-only", false, "Enable read-only mode")
 	toolsetsFlag := flag.String("toolsets", "all", "Comma-separated list of toolsets to enable")
+	transportFlag := flag.String("transport", "stdio", "Transport mode: stdio (default) or http")
 	flag.Parse()
 
-	// Handle version flag
+	// Handle version flag (before logger init since it doesn't need logging)
 	if *versionFlag {
 		fmt.Printf("blaxel-mcp-server version %s (commit: %s, built: %s)\n", version, commit, date)
 		os.Exit(0)
 	}
 
+	// Initialize logger based on transport mode
+	isStdio := *transportFlag == "stdio"
+	if err := logger.Init(isStdio); err != nil {
+		// Can't use logger here since it failed to init
+		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer logger.Close()
+
+	// Load .env file if it exists (like the CLI does)
+	if err := godotenv.Load(); err != nil {
+		// Only log error if .env file exists but can't be loaded
+		if !os.IsNotExist(err) {
+			logger.Warnf("Could not load .env file: %v", err)
+		}
+	}
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logger.Fatalf("Failed to load configuration: %v", err)
 	}
 
 	// Override read-only mode from flag if provided
@@ -58,13 +77,20 @@ func main() {
 
 	// Register tools based on enabled toolsets
 	if err := registerTools(mcp, cfg, *toolsetsFlag); err != nil {
-		log.Fatalf("Failed to register tools: %v", err)
+		logger.Fatalf("Failed to register tools: %v", err)
 	}
 
-	// Start server using stdio transport
-	log.Printf("Starting Blaxel MCP server version %s", version)
-	if err := server.ServeStdio(mcp); err != nil {
-		log.Fatalf("Server error: %v", err)
+	// Start server based on transport mode
+	logger.Printf("Starting Blaxel MCP server version %s (transport: %s)", version, *transportFlag)
+
+	if isStdio {
+		// Use stdio transport (default for MCP)
+		if err := server.ServeStdio(mcp); err != nil {
+			logger.Fatalf("Server error: %v", err)
+		}
+	} else {
+		// Future: could support HTTP or other transports here
+		logger.Fatalf("Transport '%s' not yet implemented", *transportFlag)
 	}
 }
 

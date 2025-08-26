@@ -22,37 +22,38 @@ func localQuickStartGuideHandler(req QuickStartGuideRequest) (string, error) {
 		"agent": `Quick Start Guide for Agents:
 
 1. Install Blaxel CLI:
-   npm install -g @blaxel/cli
+   	brew tap blaxel-ai/blaxel
+  	brew install blaxel
 
-2. Create a new agent project:
-   bl create-agent-app my-agent -y
+2. Login:
+	  bl login WORKSPACE_NAME
 
-3. Navigate to the project:
-   cd my-agent
+3. Create a new agent project:
+   	bl create-agent-app my-agent --template TEMPLATE_NAME -y
 
-4. Deploy the agent:
-   bl deploy
+4. Navigate to the project:
+   	cd my-agent
 
-Available templates:
-- template-google-adk-py: Google ADK Python template
-- template-langgraph-py: LangGraph Python template
-- template-pydantic-py: Pydantic Python template
-- template-crewai-py: CrewAI Python template
-- template-mastra-ts: Mastra TypeScript template
-- template-controlflow-py: ControlFlow Python template`,
+5. Deploy the agent:
+   	bl deploy
+`,
 
 		"job": `Quick Start Guide for Jobs:
 
 1. Install Blaxel CLI:
-   npm install -g @blaxel/cli
+   brew tap blaxel-ai/blaxel
+   brew install blaxel
 
-2. Create a new job project:
-   bl create-job my-job -y
+2. Login:
+   bl login WORKSPACE_NAME
 
-3. Navigate to the project:
+3. Create a new job project:
+   bl create-job my-job --template TEMPLATE_NAME -y
+
+4. Navigate to the project:
    cd my-job
 
-4. Deploy the job:
+5. Deploy the job:
    bl deploy
 
 Job templates available for batch processing tasks.`,
@@ -60,15 +61,19 @@ Job templates available for batch processing tasks.`,
 		"mcp-server": `Quick Start Guide for MCP Servers:
 
 1. Install Blaxel CLI:
-   npm install -g @blaxel/cli
+   brew tap blaxel-ai/blaxel
+   brew install blaxel
 
-2. Create a new MCP server project:
-   bl create-function my-mcp-server -y
+2. Login:
+   bl login WORKSPACE_NAME
 
-3. Navigate to the project:
+3. Create a new MCP server project:
+   bl create-mcp-server my-mcp-server --template TEMPLATE_NAME -y
+
+4. Navigate to the project:
    cd my-mcp-server
 
-4. Deploy the MCP server:
+5. Deploy the MCP server:
    bl deploy
 
 MCP servers provide tool functions for AI agents.`,
@@ -76,15 +81,19 @@ MCP servers provide tool functions for AI agents.`,
 		"sandbox": `Quick Start Guide for Sandboxes:
 
 1. Install Blaxel CLI:
-   npm install -g @blaxel/cli
+   brew tap blaxel-ai/blaxel
+   brew install blaxel
 
-2. Create a new sandbox project:
+2. Login:
+   bl login WORKSPACE_NAME
+
+3. Create a new sandbox project:
    bl create-sandbox my-sandbox -y
 
-3. Navigate to the project:
+4. Navigate to the project:
    cd my-sandbox
 
-4. Deploy the sandbox:
+5. Deploy the sandbox:
    bl deploy
 
 Sandboxes provide isolated environments for running code.`,

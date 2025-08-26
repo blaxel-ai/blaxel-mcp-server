@@ -183,21 +183,34 @@ func listIntegrationsHandler(ctx context.Context, sdkClient *sdk.ClientWithRespo
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	integrations, err := sdkClient.ListIntegrationConnectionsWithResponse(ctx)
+	resp, err := sdkClient.ListIntegrationConnectionsWithResponse(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list integrations: %w", err)
 	}
-	if integrations.JSON200 == nil {
-		return nil, fmt.Errorf("no integrations found")
+
+	integrations := []sdk.IntegrationConnection{}
+	if resp.JSON200 != nil {
+		integrations = *resp.JSON200
 	}
 
-	// Use generic filter and marshal function
-	jsonData, _ := tools.FilterAndMarshal(integrations.JSON200, req.Filter, func(integration sdk.IntegrationConnection) string {
-		if integration.Metadata != nil && integration.Metadata.Name != nil {
-			return *integration.Metadata.Name
+	// Apply filter if requested
+	if req.Filter != "" {
+		var filtered []sdk.IntegrationConnection
+		for _, integration := range integrations {
+			if integration.Metadata != nil && integration.Metadata.Name != nil &&
+				tools.ContainsString(*integration.Metadata.Name, req.Filter) {
+				filtered = append(filtered, integration)
+			}
 		}
-		return ""
-	})
+		integrations = filtered
+	}
+
+	// Format the integrations using the new formatter
+	formatted := tools.FormatIntegrations(integrations)
+	jsonData, err := json.Marshal(formatted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal formatted integrations: %w", err)
+	}
 
 	response := ListIntegrationsResponse(jsonData)
 	return &response, nil

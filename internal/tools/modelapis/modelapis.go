@@ -7,6 +7,7 @@ import (
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/logger"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -55,7 +56,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	// Initialize SDK client
 	sdkClient, err := client.NewSDKClient(cfg)
 	if err != nil {
-		fmt.Printf("Warning: Failed to initialize SDK client: %v\n", err)
+		logger.Warnf("Failed to initialize SDK client: %v", err)
 	}
 
 	// List model APIs
@@ -190,21 +191,34 @@ func listModelAPIsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponse
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	models, err := sdkClient.ListModelsWithResponse(ctx)
+	resp, err := sdkClient.ListModelsWithResponse(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list model APIs: %w", err)
 	}
-	if models.JSON200 == nil {
-		return nil, fmt.Errorf("no model APIs found")
+
+	models := []sdk.Model{}
+	if resp.JSON200 != nil {
+		models = *resp.JSON200
 	}
 
-	// Use generic filter and marshal function
-	jsonData, _ := tools.FilterAndMarshal(models.JSON200, req.Filter, func(model sdk.Model) string {
-		if model.Metadata != nil && model.Metadata.Name != nil {
-			return *model.Metadata.Name
+	// Apply filter if requested
+	if req.Filter != "" {
+		var filtered []sdk.Model
+		for _, model := range models {
+			if model.Metadata != nil && model.Metadata.Name != nil &&
+				tools.ContainsString(*model.Metadata.Name, req.Filter) {
+				filtered = append(filtered, model)
+			}
 		}
-		return ""
-	})
+		models = filtered
+	}
+
+	// Format the models using the new formatter
+	formatted := tools.FormatModels(models)
+	jsonData, err := json.Marshal(formatted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal formatted models: %w", err)
+	}
 
 	response := ListModelAPIsResponse(jsonData)
 	return &response, nil
@@ -287,7 +301,7 @@ func createModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 		if integrationResp.StatusCode() >= 400 {
 			if integrationResp.StatusCode() == 409 {
 				// Integration might already exist, try to use it
-				fmt.Printf("Integration '%s' already exists, will attempt to use it\n", integrationName)
+				logger.Printf("Integration '%s' already exists, will attempt to use it", integrationName)
 			} else {
 				return nil, fmt.Errorf("failed to create integration with status %d", integrationResp.StatusCode())
 			}

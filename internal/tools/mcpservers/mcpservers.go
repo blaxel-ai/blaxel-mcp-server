@@ -7,6 +7,7 @@ import (
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/logger"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -54,7 +55,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	// Initialize SDK client
 	sdkClient, err := client.NewSDKClient(cfg)
 	if err != nil {
-		fmt.Printf("Warning: Failed to initialize SDK client: %v\n", err)
+		logger.Warnf("Failed to initialize SDK client: %v", err)
 	}
 
 	// List MCP servers
@@ -183,21 +184,34 @@ func listMCPServersHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	servers, err := sdkClient.ListFunctionsWithResponse(ctx)
+	resp, err := sdkClient.ListFunctionsWithResponse(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list MCP servers: %w", err)
 	}
-	if servers.JSON200 == nil {
-		return nil, fmt.Errorf("no MCP servers found")
+
+	functions := []sdk.Function{}
+	if resp.JSON200 != nil {
+		functions = *resp.JSON200
 	}
 
-	// Use generic filter and marshal function
-	jsonData, _ := tools.FilterAndMarshal(servers.JSON200, req.Filter, func(server sdk.Function) string {
-		if server.Metadata != nil && server.Metadata.Name != nil {
-			return *server.Metadata.Name
+	// Apply filter if requested
+	if req.Filter != "" {
+		var filtered []sdk.Function
+		for _, fn := range functions {
+			if fn.Metadata != nil && fn.Metadata.Name != nil &&
+				tools.ContainsString(*fn.Metadata.Name, req.Filter) {
+				filtered = append(filtered, fn)
+			}
 		}
-		return ""
-	})
+		functions = filtered
+	}
+
+	// Format the functions using the new formatter
+	formatted := tools.FormatFunctions(functions)
+	jsonData, err := json.Marshal(formatted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal formatted functions: %w", err)
+	}
 
 	response := ListMCPServersResponse(jsonData)
 	return &response, nil
@@ -291,7 +305,7 @@ func createMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithRespon
 		if integrationResp.StatusCode() >= 400 {
 			if integrationResp.StatusCode() == 409 {
 				// Integration might already exist, try to use it
-				fmt.Printf("Integration '%s' already exists, will attempt to use it\n", integrationName)
+				logger.Printf("Integration '%s' already exists, will attempt to use it", integrationName)
 			} else {
 				return nil, fmt.Errorf("failed to create integration with status %d", integrationResp.StatusCode())
 			}

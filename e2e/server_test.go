@@ -87,7 +87,7 @@ func TestToolsDiscovery(t *testing.T) {
 
 func TestReadOnlyMode(t *testing.T) {
 	env := testEnv()
-	env["BLAXEL_READ_ONLY"] = "true"
+	env["BL_READ_ONLY"] = "true"
 
 	client := NewMCPTestClient(t, env)
 	defer client.Close()
