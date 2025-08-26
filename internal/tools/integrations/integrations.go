@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
@@ -11,6 +12,52 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+// Request/Response types for type safety
+type ListIntegrationsRequest struct {
+	Filter string `json:"filter,omitempty"`
+}
+
+type ListIntegrationsResponse struct {
+	Integrations []IntegrationInfo `json:"integrations"`
+	Count        int               `json:"count"`
+}
+
+type IntegrationInfo struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type GetIntegrationRequest struct {
+	Name string `json:"name"`
+}
+
+type GetIntegrationResponse struct {
+	Integration json.RawMessage `json:"integration"`
+	Name        string          `json:"name"`
+}
+
+type CreateIntegrationRequest struct {
+	Name            string            `json:"name"`
+	IntegrationType string            `json:"integrationType"`
+	Secret          map[string]string `json:"secret,omitempty"`
+	Config          map[string]string `json:"config,omitempty"`
+}
+
+type CreateIntegrationResponse struct {
+	Success     bool                   `json:"success"`
+	Message     string                 `json:"message"`
+	Integration map[string]interface{} `json:"integration"`
+}
+
+type DeleteIntegrationRequest struct {
+	Name string `json:"name"`
+}
+
+type DeleteIntegrationResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
 
 // RegisterTools registers all integration-related tools
 func RegisterTools(s *server.MCPServer, cfg *config.Config) {
@@ -21,72 +68,130 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	}
 
 	// List integrations
-	s.AddTool(
-		mcp.NewToolWithRawSchema("list_integrations",
-			"List all integration connections in the workspace",
-			json.RawMessage(`{"type": "object", "properties": {"filter": {"type": "string", "description": "Optional filter string"}}}`)),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			result, err := listIntegrationsHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-					IsError: true,
-				}, nil
-			}
-			jsonResult, _ := json.MarshalIndent(result, "", "  ")
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{mcp.NewTextContent(string(jsonResult))},
-			}, nil
-		},
+	listIntegrationsTool := mcp.NewTool("list_integrations",
+		mcp.WithDescription("List all integration connections in the workspace"),
+		mcp.WithString("filter",
+			mcp.Description("Optional filter string"),
+		),
 	)
+
+	s.AddTool(listIntegrationsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req ListIntegrationsRequest
+		if err := request.BindArguments(&req); err != nil {
+			// If binding fails, try to get filter directly for backward compatibility
+			req.Filter = request.GetString("filter", "")
+		}
+
+		result, err := listIntegrationsHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonResult, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	})
 
 	// Get integration
-	s.AddTool(
-		mcp.NewToolWithRawSchema("get_integration",
-			"Get details of a specific integration connection",
-			json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string", "description": "Name of the integration"}}, "required": ["name"]}`)),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			result, err := getIntegrationHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-					IsError: true,
-				}, nil
-			}
-			jsonResult, _ := json.MarshalIndent(result, "", "  ")
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{mcp.NewTextContent(string(jsonResult))},
-			}, nil
-		},
+	getIntegrationTool := mcp.NewTool("get_integration",
+		mcp.WithDescription("Get details of a specific integration connection"),
+		mcp.WithString("name",
+			mcp.Required(),
+			mcp.Description("Name of the integration"),
+		),
 	)
 
+	s.AddTool(getIntegrationTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req GetIntegrationRequest
+		if err := request.BindArguments(&req); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+		}
+
+		if req.Name == "" {
+			return mcp.NewToolResultError("integration name is required"), nil
+		}
+
+		result, err := getIntegrationHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonResult, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	})
+
 	if !cfg.ReadOnly {
-		// Delete integration
-		s.AddTool(
-			mcp.NewToolWithRawSchema("delete_integration",
-				"Delete an integration connection by name",
-				json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string", "description": "Name of the integration to delete"}}, "required": ["name"]}`)),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				args, _ := request.Params.Arguments.(map[string]interface{})
-				result, err := deleteIntegrationHandler(ctx, sdkClient, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-						IsError: true,
-					}, nil
-				}
-				jsonResult, _ := json.MarshalIndent(result, "", "  ")
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(string(jsonResult))},
-				}, nil
-			},
+		// Create integration
+		createIntegrationTool := mcp.NewTool("create_integration",
+			mcp.WithDescription("Create a new integration connection"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name for the integration connection"),
+			),
+			mcp.WithString("integrationType",
+				mcp.Required(),
+				mcp.Description("Type of integration (e.g., github, slack, etc.)"),
+			),
+			mcp.WithObject("secret",
+				mcp.Description("Secret credentials for the integration"),
+			),
+			mcp.WithObject("config",
+				mcp.Description("Configuration parameters for the integration"),
+			),
 		)
+
+		s.AddTool(createIntegrationTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req CreateIntegrationRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Name == "" {
+				return mcp.NewToolResultError("integration name is required"), nil
+			}
+			if req.IntegrationType == "" {
+				return mcp.NewToolResultError("integrationType is required"), nil
+			}
+
+			result, err := createIntegrationHandler(ctx, sdkClient, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			jsonResult, _ := json.MarshalIndent(result, "", "  ")
+			return mcp.NewToolResultText(string(jsonResult)), nil
+		})
+
+		// Delete integration
+		deleteIntegrationTool := mcp.NewTool("delete_integration",
+			mcp.WithDescription("Delete an integration connection by name"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name of the integration to delete"),
+			),
+		)
+
+		s.AddTool(deleteIntegrationTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req DeleteIntegrationRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Name == "" {
+				return mcp.NewToolResultError("integration name is required"), nil
+			}
+
+			result, err := deleteIntegrationHandler(ctx, sdkClient, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			jsonResult, _ := json.MarshalIndent(result, "", "  ")
+			return mcp.NewToolResultText(string(jsonResult)), nil
+		})
 	}
 }
 
-func listIntegrationsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func listIntegrationsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req ListIntegrationsRequest) (*ListIntegrationsResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -98,86 +203,121 @@ func listIntegrationsHandler(ctx context.Context, sdkClient *sdk.ClientWithRespo
 	if integrations.JSON200 == nil {
 		return nil, fmt.Errorf("no integrations found")
 	}
-
-	// Apply optional filter
-	filter, _ := params["filter"].(string)
-	var filtered []map[string]interface{}
+	var filtered []IntegrationInfo
 
 	for _, integration := range *integrations.JSON200 {
-		if filter != "" {
+		if req.Filter != "" {
 			name := ""
 			if integration.Metadata != nil && integration.Metadata.Name != nil {
 				name = *integration.Metadata.Name
 			}
-			if name == "" || !containsString(name, filter) {
+			if name == "" || !containsString(name, req.Filter) {
 				continue
 			}
 		}
 
-		item := map[string]interface{}{
-			"name": "",
-			"type": "",
-		}
+		item := IntegrationInfo{}
 
 		if integration.Metadata != nil && integration.Metadata.Name != nil {
-			item["name"] = *integration.Metadata.Name
+			item.Name = *integration.Metadata.Name
 		}
 
 		if integration.Spec != nil && integration.Spec.Integration != nil {
-			item["type"] = *integration.Spec.Integration
+			item.Type = *integration.Spec.Integration
 		}
 
 		filtered = append(filtered, item)
 	}
 
-	return map[string]interface{}{
-		"integrations": filtered,
-		"count":        len(filtered),
+	return &ListIntegrationsResponse{
+		Integrations: filtered,
+		Count:        len(filtered),
 	}, nil
 }
 
-func getIntegrationHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func getIntegrationHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetIntegrationRequest) (*GetIntegrationResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	name, ok := params["name"].(string)
-	if !ok || name == "" {
-		return nil, fmt.Errorf("integration name is required")
-	}
-
-	integration, err := sdkClient.GetIntegrationConnectionWithResponse(ctx, name)
+	integration, err := sdkClient.GetIntegrationConnectionWithResponse(ctx, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get integration: %w", err)
 	}
+	if integration.JSON200 == nil {
+		return nil, fmt.Errorf("no integration found")
+	}
 
-	jsonData, _ := json.MarshalIndent(integration, "", "  ")
-	return map[string]interface{}{
-		"integration": json.RawMessage(jsonData),
+	jsonData, _ := json.MarshalIndent(*integration.JSON200, "", "  ")
+	return &GetIntegrationResponse{
+		Integration: json.RawMessage(jsonData),
+		Name:        req.Name,
 	}, nil
 }
 
-func deleteIntegrationHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func createIntegrationHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req CreateIntegrationRequest) (*CreateIntegrationResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	name, ok := params["name"].(string)
-	if !ok || name == "" {
-		return nil, fmt.Errorf("integration name is required")
+	// Build integration request
+	integrationData := sdk.CreateIntegrationConnectionJSONRequestBody{
+		Metadata: &sdk.Metadata{
+			Name: &req.Name,
+		},
+		Spec: &sdk.IntegrationConnectionSpec{
+			Integration: &req.IntegrationType,
+		},
 	}
 
-	_, err := sdkClient.DeleteIntegrationConnectionWithResponse(ctx, name)
+	// Add secret if provided
+	if len(req.Secret) > 0 {
+		integrationData.Spec.Secret = &req.Secret
+	}
+
+	// Add config if provided
+	if len(req.Config) > 0 {
+		integrationData.Spec.Config = &req.Config
+	}
+
+	integration, err := sdkClient.CreateIntegrationConnectionWithResponse(ctx, integrationData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create integration: %w", err)
+	}
+
+	if integration.JSON200 == nil {
+		if integration.StatusCode() == 409 {
+			return nil, fmt.Errorf("integration with name '%s' already exists", req.Name)
+		}
+		return nil, fmt.Errorf("failed to create integration with status %d", integration.StatusCode())
+	}
+
+	return &CreateIntegrationResponse{
+		Success: true,
+		Message: fmt.Sprintf("Integration '%s' created successfully", req.Name),
+		Integration: map[string]interface{}{
+			"name": req.Name,
+			"type": req.IntegrationType,
+		},
+	}, nil
+}
+
+func deleteIntegrationHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req DeleteIntegrationRequest) (*DeleteIntegrationResponse, error) {
+	if sdkClient == nil {
+		return nil, fmt.Errorf("SDK client not initialized")
+	}
+
+	_, err := sdkClient.DeleteIntegrationConnectionWithResponse(ctx, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete integration: %w", err)
 	}
 
-	return map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Integration '%s' deleted successfully", name),
+	return &DeleteIntegrationResponse{
+		Success: true,
+		Message: fmt.Sprintf("Integration '%s' deleted successfully", req.Name),
 	}, nil
 }
 
 func containsString(s, substr string) bool {
-	return len(substr) == 0 || (len(s) >= len(substr) && s == substr)
+	return len(substr) == 0 || strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }

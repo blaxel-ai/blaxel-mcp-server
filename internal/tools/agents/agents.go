@@ -14,6 +14,39 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// Request/Response types for type safety
+type ListAgentsRequest struct {
+	Filter string `json:"filter,omitempty"`
+}
+
+type ListAgentsResponse struct {
+	Agents []AgentInfo `json:"agents"`
+	Count  int         `json:"count"`
+}
+
+type AgentInfo struct {
+	Name        string `json:"name"`
+	Status      string `json:"status,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type GetAgentRequest struct {
+	Name string `json:"name"`
+}
+
+type GetAgentResponse struct {
+	Agent json.RawMessage `json:"agent"`
+}
+
+type DeleteAgentRequest struct {
+	Name string `json:"name"`
+}
+
+type DeleteAgentResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
 // RegisterTools registers all agent-related tools
 func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	// Initialize SDK client
@@ -24,141 +57,89 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	}
 
 	// List agents tool
-	listAgentsSchema := json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"filter": {
-				"type": "string",
-				"description": "Optional filter string to match agent names"
-			}
-		}
-	}`)
-
-	s.AddTool(
-		mcp.NewToolWithRawSchema("list_agents", "List all agents in the workspace", listAgentsSchema),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Parse arguments
-			args, ok := request.Params.Arguments.(map[string]interface{})
-			if !ok {
-				args = make(map[string]interface{})
-			}
-
-			result, err := listAgentsHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent(err.Error()),
-					},
-					IsError: true,
-				}, nil
-			}
-
-			// Convert result to JSON
-			jsonResult, _ := json.MarshalIndent(result, "", "  ")
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(string(jsonResult)),
-				},
-			}, nil
-		},
+	listAgentsTool := mcp.NewTool("list_agents",
+		mcp.WithDescription("List all agents in the workspace"),
+		mcp.WithString("filter",
+			mcp.Description("Optional filter string to match agent names"),
+		),
 	)
+
+	s.AddTool(listAgentsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req ListAgentsRequest
+		if err := request.BindArguments(&req); err != nil {
+			// If binding fails, try to get filter directly for backward compatibility
+			req.Filter = request.GetString("filter", "")
+		}
+
+		result, err := listAgentsHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonResult, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	})
 
 	// Get agent tool
-	getAgentSchema := json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"name": {
-				"type": "string",
-				"description": "Name of the agent to retrieve"
-			}
-		},
-		"required": ["name"]
-	}`)
-
-	s.AddTool(
-		mcp.NewToolWithRawSchema("get_agent", "Get details of a specific agent", getAgentSchema),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Parse arguments
-			args, ok := request.Params.Arguments.(map[string]interface{})
-			if !ok {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent("Invalid arguments"),
-					},
-					IsError: true,
-				}, nil
-			}
-
-			result, err := getAgentHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent(err.Error()),
-					},
-					IsError: true,
-				}, nil
-			}
-
-			// Convert result to JSON
-			jsonResult, _ := json.MarshalIndent(result, "", "  ")
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(string(jsonResult)),
-				},
-			}, nil
-		},
+	getAgentTool := mcp.NewTool("get_agent",
+		mcp.WithDescription("Get details of a specific agent"),
+		mcp.WithString("name",
+			mcp.Required(),
+			mcp.Description("Name of the agent to retrieve"),
+		),
 	)
+
+	s.AddTool(getAgentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req GetAgentRequest
+		if err := request.BindArguments(&req); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+		}
+
+		if req.Name == "" {
+			return mcp.NewToolResultError("agent name is required"), nil
+		}
+
+		result, err := getAgentHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonResult, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	})
 
 	// Delete agent tool (only if not in readonly mode)
 	if !cfg.ReadOnly {
-		deleteAgentSchema := json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"name": {
-					"type": "string",
-					"description": "Name of the agent to delete"
-				}
-			},
-			"required": ["name"]
-		}`)
-
-		s.AddTool(
-			mcp.NewToolWithRawSchema("delete_agent", "Delete an agent from the workspace", deleteAgentSchema),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				// Parse arguments
-				args, ok := request.Params.Arguments.(map[string]interface{})
-				if !ok {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{
-							mcp.NewTextContent("Invalid arguments"),
-						},
-						IsError: true,
-					}, nil
-				}
-
-				result, err := deleteAgentHandler(ctx, sdkClient, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{
-							mcp.NewTextContent(err.Error()),
-						},
-						IsError: true,
-					}, nil
-				}
-
-				// Convert result to JSON
-				jsonResult, _ := json.MarshalIndent(result, "", "  ")
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent(string(jsonResult)),
-					},
-				}, nil
-			},
+		deleteAgentTool := mcp.NewTool("delete_agent",
+			mcp.WithDescription("Delete an agent from the workspace"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name of the agent to delete"),
+			),
 		)
+
+		s.AddTool(deleteAgentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req DeleteAgentRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Name == "" {
+				return mcp.NewToolResultError("agent name is required"), nil
+			}
+
+			result, err := deleteAgentHandler(ctx, sdkClient, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			jsonResult, _ := json.MarshalIndent(result, "", "  ")
+			return mcp.NewToolResultText(string(jsonResult)), nil
+		})
 	}
 }
 
-func listAgentsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func listAgentsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req ListAgentsRequest) (*ListAgentsResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -178,55 +159,50 @@ func listAgentsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, 
 	}
 
 	// Apply optional filter
-	filter, _ := params["filter"].(string)
-
-	var filteredAgents []map[string]interface{}
+	var filteredAgents []AgentInfo
 	for _, agent := range agents {
 		// Check if filter matches
-		if filter != "" {
+		if req.Filter != "" {
 			name := ""
 			if agent.Metadata != nil && agent.Metadata.Name != nil {
 				name = *agent.Metadata.Name
 			}
 			// Skip if name doesn't contain filter
-			if name == "" || !contains(name, filter) {
+			if name == "" || !contains(name, req.Filter) {
 				continue
 			}
 		}
 
 		// Build agent info
-		agentInfo := map[string]interface{}{
-			"name": "",
-		}
+		agentInfo := AgentInfo{}
 
 		if agent.Metadata != nil && agent.Metadata.Name != nil {
-			agentInfo["name"] = *agent.Metadata.Name
+			agentInfo.Name = *agent.Metadata.Name
 		}
 
-		if agent.Spec != nil {
-			// Add any relevant spec fields here
+		if agent.Status != nil {
+			agentInfo.Status = *agent.Status
+		}
+
+		if agent.Spec != nil && agent.Spec.Description != nil {
+			agentInfo.Description = *agent.Spec.Description
 		}
 
 		filteredAgents = append(filteredAgents, agentInfo)
 	}
 
-	return map[string]interface{}{
-		"agents": filteredAgents,
-		"count":  len(filteredAgents),
+	return &ListAgentsResponse{
+		Agents: filteredAgents,
+		Count:  len(filteredAgents),
 	}, nil
 }
 
-func getAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func getAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetAgentRequest) (*GetAgentResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	name, ok := params["name"].(string)
-	if !ok || name == "" {
-		return nil, fmt.Errorf("agent name is required")
-	}
-
-	resp, err := sdkClient.GetAgentWithResponse(ctx, name)
+	resp, err := sdkClient.GetAgentWithResponse(ctx, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agent: %w", err)
 	}
@@ -245,20 +221,17 @@ func getAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, pa
 		return nil, fmt.Errorf("failed to format agent data: %w", err)
 	}
 
-	return json.RawMessage(jsonData), nil
+	return &GetAgentResponse{
+		Agent: json.RawMessage(jsonData),
+	}, nil
 }
 
-func deleteAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func deleteAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req DeleteAgentRequest) (*DeleteAgentResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	name, ok := params["name"].(string)
-	if !ok || name == "" {
-		return nil, fmt.Errorf("agent name is required")
-	}
-
-	resp, err := sdkClient.DeleteAgentWithResponse(ctx, name)
+	resp, err := sdkClient.DeleteAgentWithResponse(ctx, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete agent: %w", err)
 	}
@@ -267,9 +240,9 @@ func deleteAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses,
 		return nil, fmt.Errorf("delete agent failed with status %d", resp.StatusCode())
 	}
 
-	return map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Agent '%s' deleted successfully", name),
+	return &DeleteAgentResponse{
+		Success: true,
+		Message: fmt.Sprintf("Agent '%s' deleted successfully", req.Name),
 	}, nil
 }
 

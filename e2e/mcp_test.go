@@ -1,29 +1,26 @@
 package e2e
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
+
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// MCPTestClient represents a test client for the MCP server
+// MCPTestClient wraps the official mcp-go client for testing
 type MCPTestClient struct {
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	stdout  io.ReadCloser
-	scanner *bufio.Scanner
-	mu      sync.Mutex
-	reqID   int
+	client *client.Client
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
-// NewMCPTestClient creates a new test client
+// NewMCPTestClient creates a new test client using the official mcp-go library
 func NewMCPTestClient(t *testing.T, env map[string]string) *MCPTestClient {
 	t.Helper()
 
@@ -33,125 +30,76 @@ func NewMCPTestClient(t *testing.T, env map[string]string) *MCPTestClient {
 		t.Fatalf("Server binary not found at %s. Run 'make build' first.", serverPath)
 	}
 
-	// Set up command
-	cmd := exec.Command(serverPath)
-
-	// Set environment
-	cmd.Env = os.Environ()
+	// Prepare environment variables
+	envVars := os.Environ()
 	for k, v := range env {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+		envVars = append(envVars, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	// Set up pipes
-	stdin, err := cmd.StdinPipe()
+	// Create the MCP client using stdio transport
+	stdioClient, err := client.NewStdioMCPClient(serverPath, envVars)
 	if err != nil {
-		t.Fatalf("Failed to create stdin pipe: %v", err)
+		t.Fatalf("Failed to create MCP client: %v", err)
 	}
 
-	stdout, err := cmd.StdoutPipe()
+	// Create context with timeout for initialization
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+	// Initialize the client with the server
+	_, err = stdioClient.Initialize(ctx, mcp.InitializeRequest{
+		Params: mcp.InitializeParams{
+			ProtocolVersion: mcp.LATEST_PROTOCOL_VERSION,
+			ClientInfo: mcp.Implementation{
+				Name:    "Integration Test Client",
+				Version: "1.0.0",
+			},
+		},
+	})
 	if err != nil {
-		t.Fatalf("Failed to create stdout pipe: %v", err)
+		cancel()
+		stdioClient.Close()
+		t.Fatalf("Failed to initialize MCP client: %v", err)
 	}
 
-	// Start the server
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("Failed to start server: %v", err)
+	return &MCPTestClient{
+		client: stdioClient,
+		ctx:    ctx,
+		cancel: cancel,
 	}
-
-	client := &MCPTestClient{
-		cmd:     cmd,
-		stdin:   stdin,
-		stdout:  stdout,
-		scanner: bufio.NewScanner(stdout),
-		reqID:   1,
-	}
-
-	// Wait for server to be ready
-	time.Sleep(500 * time.Millisecond)
-
-	return client
 }
 
-// SendRequest sends a JSON-RPC request and returns the response
-func (c *MCPTestClient) SendRequest(method string, params interface{}) (json.RawMessage, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// CallTool calls a tool and returns the result
+func (c *MCPTestClient) CallTool(name string, arguments map[string]interface{}) (*mcp.CallToolResult, error) {
+	return c.client.CallTool(c.ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name:      name,
+			Arguments: arguments,
+		},
+	})
+}
 
-	// Create request
-	req := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"method":  method,
-		"id":      c.reqID,
-	}
-	if params != nil {
-		req["params"] = params
-	}
-	c.reqID++
+// ListTools lists available tools
+func (c *MCPTestClient) ListTools() (*mcp.ListToolsResult, error) {
+	return c.client.ListTools(c.ctx, mcp.ListToolsRequest{})
+}
 
-	// Send request
-	reqBytes, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
+// Ping sends a ping to the server
+func (c *MCPTestClient) Ping() error {
+	return c.client.Ping(c.ctx)
+}
 
-	if _, err := fmt.Fprintf(c.stdin, "%s\n", reqBytes); err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-
-	// Read response
-	if !c.scanner.Scan() {
-		if err := c.scanner.Err(); err != nil {
-			return nil, fmt.Errorf("failed to read response: %w", err)
-		}
-		return nil, fmt.Errorf("no response received")
-	}
-
-	// Parse response
-	var resp struct {
-		Result json.RawMessage `json:"result"`
-		Error  *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-			Data    string `json:"data,omitempty"`
-		} `json:"error"`
-	}
-
-	if err := json.Unmarshal([]byte(c.scanner.Text()), &resp); err != nil {
-		// Skip non-JSON lines (like startup logs)
-		if c.scanner.Scan() {
-			if err := json.Unmarshal([]byte(c.scanner.Text()), &resp); err != nil {
-				return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-			}
-		} else {
-			return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-		}
-	}
-
-	if resp.Error != nil {
-		return nil, fmt.Errorf("server error: %s (code: %d)", resp.Error.Message, resp.Error.Code)
-	}
-
-	return resp.Result, nil
+// GetInitializeResult returns the initialization result
+func (c *MCPTestClient) GetServerCapabilities() mcp.ServerCapabilities {
+	return c.client.GetServerCapabilities()
 }
 
 // Close shuts down the test client
 func (c *MCPTestClient) Close() {
-	c.stdin.Close()
-	c.stdout.Close()
-
-	// Give the server time to shut down gracefully
-	done := make(chan error, 1)
-	go func() {
-		done <- c.cmd.Wait()
-	}()
-
-	select {
-	case <-done:
-		// Server exited
-	case <-time.After(2 * time.Second):
-		// Force kill if it doesn't exit
-		c.cmd.Process.Kill()
-		<-done
+	if c.cancel != nil {
+		c.cancel()
+	}
+	if c.client != nil {
+		c.client.Close()
 	}
 }
 
@@ -169,4 +117,72 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return v
 	}
 	return defaultValue
+}
+
+// Helper function to check if a tool call resulted in an error
+func checkToolError(result *mcp.CallToolResult) (bool, string) {
+	if result == nil {
+		return false, ""
+	}
+
+	if result.IsError {
+		if len(result.Content) > 0 {
+			for _, content := range result.Content {
+				// Try to cast to TextContent
+				if textContent, ok := mcp.AsTextContent(content); ok {
+					return true, textContent.Text
+				}
+				// Try to marshal and unmarshal to check content type
+				if data, err := json.Marshal(content); err == nil {
+					var contentMap map[string]interface{}
+					if err := json.Unmarshal(data, &contentMap); err == nil {
+						if contentMap["type"] == "text" {
+							if text, ok := contentMap["text"].(string); ok {
+								return true, text
+							}
+						}
+					}
+				}
+			}
+		}
+		return true, "Error occurred but no message available"
+	}
+
+	return false, ""
+}
+
+// Helper function to extract JSON result from tool response
+func extractJSONResult(result *mcp.CallToolResult) (map[string]interface{}, error) {
+	if result == nil || len(result.Content) == 0 {
+		return nil, fmt.Errorf("no content in result")
+	}
+
+	for _, content := range result.Content {
+		var text string
+		// Try to cast to TextContent
+		if textContent, ok := mcp.AsTextContent(content); ok {
+			text = textContent.Text
+		} else {
+			// Try to marshal and unmarshal to extract text
+			if data, err := json.Marshal(content); err == nil {
+				var contentMap map[string]interface{}
+				if err := json.Unmarshal(data, &contentMap); err == nil {
+					if contentMap["type"] == "text" {
+						if str, ok := contentMap["text"].(string); ok {
+							text = str
+						}
+					}
+				}
+			}
+		}
+
+		if text != "" {
+			var resp map[string]interface{}
+			if err := json.Unmarshal([]byte(text), &resp); err == nil {
+				return resp, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("no valid JSON content found")
 }

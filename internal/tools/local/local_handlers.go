@@ -12,8 +12,8 @@ import (
 	"github.com/blaxel-ai/toolkit/sdk"
 )
 
-func localQuickStartGuideHandler(params map[string]interface{}) (string, error) {
-	resourceType, _ := params["resourceType"].(string)
+func localQuickStartGuideHandler(req QuickStartGuideRequest) (string, error) {
+	resourceType := req.ResourceType
 	if resourceType == "" {
 		resourceType = "all"
 	}
@@ -108,8 +108,8 @@ Sandboxes provide isolated environments for running code.`,
 	return guide, nil
 }
 
-func localListTemplatesHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (string, error) {
-	resourceType, _ := params["resourceType"].(string)
+func localListTemplatesHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req ListTemplatesRequest) (string, error) {
+	resourceType := req.ResourceType
 	if resourceType == "" {
 		return "", fmt.Errorf("resourceType is required")
 	}
@@ -203,9 +203,9 @@ func localListTemplatesHandler(ctx context.Context, sdkClient *sdk.ClientWithRes
 	return result.String(), nil
 }
 
-func localCreateAgentHandler(cfg *config.Config, params map[string]interface{}) (string, error) {
-	directory, ok := params["directory"].(string)
-	if !ok || directory == "" {
+func localCreateAgentHandler(cfg *config.Config, req CreateResourceRequest) (string, error) {
+	directory := req.Directory
+	if directory == "" {
 		return "", fmt.Errorf("directory is required")
 	}
 
@@ -223,8 +223,8 @@ func localCreateAgentHandler(cfg *config.Config, params map[string]interface{}) 
 	}
 
 	// Add template if specified
-	if template, ok := params["template"].(string); ok && template != "" {
-		cmd.Args = append(cmd.Args, "--template", template)
+	if req.Template != "" {
+		cmd.Args = append(cmd.Args, "--template", req.Template)
 	}
 
 	// Execute command
@@ -236,9 +236,9 @@ func localCreateAgentHandler(cfg *config.Config, params map[string]interface{}) 
 	return fmt.Sprintf("Successfully created agent app in directory: %s\n\n%s", directory, string(output)), nil
 }
 
-func localCreateJobHandler(cfg *config.Config, params map[string]interface{}) (string, error) {
-	directory, ok := params["directory"].(string)
-	if !ok || directory == "" {
+func localCreateJobHandler(cfg *config.Config, req CreateResourceRequest) (string, error) {
+	directory := req.Directory
+	if directory == "" {
 		return "", fmt.Errorf("directory is required")
 	}
 
@@ -256,8 +256,8 @@ func localCreateJobHandler(cfg *config.Config, params map[string]interface{}) (s
 	}
 
 	// Add template if specified
-	if template, ok := params["template"].(string); ok && template != "" {
-		cmd.Args = append(cmd.Args, "--template", template)
+	if req.Template != "" {
+		cmd.Args = append(cmd.Args, "--template", req.Template)
 	}
 
 	// Execute command
@@ -269,9 +269,9 @@ func localCreateJobHandler(cfg *config.Config, params map[string]interface{}) (s
 	return fmt.Sprintf("Successfully created job in directory: %s\n\n%s", directory, string(output)), nil
 }
 
-func localCreateMCPServerHandler(cfg *config.Config, params map[string]interface{}) (string, error) {
-	directory, ok := params["directory"].(string)
-	if !ok || directory == "" {
+func localCreateMCPServerHandler(cfg *config.Config, req CreateResourceRequest) (string, error) {
+	directory := req.Directory
+	if directory == "" {
 		return "", fmt.Errorf("directory is required")
 	}
 
@@ -289,8 +289,8 @@ func localCreateMCPServerHandler(cfg *config.Config, params map[string]interface
 	}
 
 	// Add template if specified
-	if template, ok := params["template"].(string); ok && template != "" {
-		cmd.Args = append(cmd.Args, "--template", template)
+	if req.Template != "" {
+		cmd.Args = append(cmd.Args, "--template", req.Template)
 	}
 
 	// Execute command
@@ -302,9 +302,9 @@ func localCreateMCPServerHandler(cfg *config.Config, params map[string]interface
 	return fmt.Sprintf("Successfully created MCP server in directory: %s\n\n%s", directory, string(output)), nil
 }
 
-func localCreateSandboxHandler(cfg *config.Config, params map[string]interface{}) (string, error) {
-	directory, ok := params["directory"].(string)
-	if !ok || directory == "" {
+func localCreateSandboxHandler(cfg *config.Config, req CreateResourceRequest) (string, error) {
+	directory := req.Directory
+	if directory == "" {
 		return "", fmt.Errorf("directory is required")
 	}
 
@@ -322,8 +322,8 @@ func localCreateSandboxHandler(cfg *config.Config, params map[string]interface{}
 	}
 
 	// Add template if specified
-	if template, ok := params["template"].(string); ok && template != "" {
-		cmd.Args = append(cmd.Args, "--template", template)
+	if req.Template != "" {
+		cmd.Args = append(cmd.Args, "--template", req.Template)
 	}
 
 	// Execute command
@@ -335,10 +335,9 @@ func localCreateSandboxHandler(cfg *config.Config, params map[string]interface{}
 	return fmt.Sprintf("Successfully created sandbox in directory: %s\n\n%s", directory, string(output)), nil
 }
 
-func localDeployHandler(cfg *config.Config, params map[string]interface{}) (string, error) {
+func localDeployHandler(cfg *config.Config, req DeployResourceRequest) (string, error) {
 	// Determine target directory
-	directory, _ := params["directory"].(string)
-	targetPath := directory
+	targetPath := req.Directory
 	if targetPath == "" {
 		var err error
 		targetPath, err = os.Getwd()
@@ -346,7 +345,7 @@ func localDeployHandler(cfg *config.Config, params map[string]interface{}) (stri
 			return "", fmt.Errorf("failed to get current directory: %w", err)
 		}
 	} else {
-		targetPath = filepath.Join(".", directory)
+		targetPath = filepath.Join(".", targetPath)
 	}
 
 	// Check if directory exists
@@ -372,23 +371,8 @@ func localDeployHandler(cfg *config.Config, params map[string]interface{}) (stri
 	}
 
 	// Add directory if specified
-	if directory != "" {
-		cmd.Args = append(cmd.Args, "--directory", directory)
-	}
-
-	// Add name if specified
-	if name, ok := params["name"].(string); ok && name != "" {
-		cmd.Args = append(cmd.Args, "--name", name)
-	}
-
-	// Add skip build flag
-	if skipBuild, ok := params["skipBuild"].(bool); ok && skipBuild {
-		cmd.Args = append(cmd.Args, "--skip-build")
-	}
-
-	// Add dry run flag
-	if dryRun, ok := params["dryRun"].(bool); ok && dryRun {
-		cmd.Args = append(cmd.Args, "--dryrun")
+	if req.Directory != "" {
+		cmd.Args = append(cmd.Args, "--directory", req.Directory)
 	}
 
 	// Execute command
@@ -398,21 +382,18 @@ func localDeployHandler(cfg *config.Config, params map[string]interface{}) (stri
 	}
 
 	statusMessage := "Successfully deployed"
-	if dryRun, ok := params["dryRun"].(bool); ok && dryRun {
-		statusMessage = "Dry run completed successfully"
-	}
 
 	return fmt.Sprintf("%s from directory: %s\n\n%s", statusMessage, targetPath, string(output)), nil
 }
 
-func localRunHandler(cfg *config.Config, params map[string]interface{}) (string, error) {
-	resourceType, ok := params["resourceType"].(string)
-	if !ok || resourceType == "" {
+func localRunHandler(cfg *config.Config, req RunResourceRequest) (string, error) {
+	resourceType := req.ResourceType
+	if resourceType == "" {
 		return "", fmt.Errorf("resourceType is required")
 	}
 
-	resourceName, ok := params["resourceName"].(string)
-	if !ok || resourceName == "" {
+	resourceName := req.ResourceName
+	if resourceName == "" {
 		return "", fmt.Errorf("resourceName is required")
 	}
 

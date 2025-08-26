@@ -14,6 +14,51 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// Request/Response types for type safety
+type ListJobsRequest struct {
+	Status string `json:"status,omitempty"`
+}
+
+type ListJobsResponse struct {
+	Jobs  []JobInfo `json:"jobs"`
+	Count int       `json:"count"`
+}
+
+type JobInfo struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+type GetJobRequest struct {
+	ID string `json:"id"`
+}
+
+type GetJobResponse struct {
+	Job json.RawMessage `json:"job"`
+}
+
+type CreateJobRequest struct {
+	Name        string `json:"name"`
+	AgentName   string `json:"agentName,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type CreateJobResponse struct {
+	Success bool                   `json:"success"`
+	Message string                 `json:"message"`
+	Job     map[string]interface{} `json:"job"`
+}
+
+type DeleteJobRequest struct {
+	ID string `json:"id"`
+}
+
+type DeleteJobResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
 // RegisterTools registers all job-related tools
 func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	// Initialize SDK client
@@ -24,141 +69,89 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	}
 
 	// List jobs tool
-	listJobsSchema := json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"status": {
-				"type": "string",
-				"description": "Optional filter by job status"
-			}
-		}
-	}`)
-
-	s.AddTool(
-		mcp.NewToolWithRawSchema("list_jobs", "List all jobs in the workspace", listJobsSchema),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Parse arguments
-			args, ok := request.Params.Arguments.(map[string]interface{})
-			if !ok {
-				args = make(map[string]interface{})
-			}
-
-			result, err := listJobsHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent(err.Error()),
-					},
-					IsError: true,
-				}, nil
-			}
-
-			// Convert result to JSON
-			jsonResult, _ := json.MarshalIndent(result, "", "  ")
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(string(jsonResult)),
-				},
-			}, nil
-		},
+	listJobsTool := mcp.NewTool("list_jobs",
+		mcp.WithDescription("List all jobs in the workspace"),
+		mcp.WithString("status",
+			mcp.Description("Optional filter by job status"),
+		),
 	)
+
+	s.AddTool(listJobsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req ListJobsRequest
+		if err := request.BindArguments(&req); err != nil {
+			// If binding fails, try to get status directly for backward compatibility
+			req.Status = request.GetString("status", "")
+		}
+
+		result, err := listJobsHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonResult, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	})
 
 	// Get job tool
-	getJobSchema := json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"id": {
-				"type": "string",
-				"description": "ID of the job to retrieve"
-			}
-		},
-		"required": ["id"]
-	}`)
-
-	s.AddTool(
-		mcp.NewToolWithRawSchema("get_job", "Get details of a specific job", getJobSchema),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Parse arguments
-			args, ok := request.Params.Arguments.(map[string]interface{})
-			if !ok {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent("Invalid arguments"),
-					},
-					IsError: true,
-				}, nil
-			}
-
-			result, err := getJobHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent(err.Error()),
-					},
-					IsError: true,
-				}, nil
-			}
-
-			// Convert result to JSON
-			jsonResult, _ := json.MarshalIndent(result, "", "  ")
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(string(jsonResult)),
-				},
-			}, nil
-		},
+	getJobTool := mcp.NewTool("get_job",
+		mcp.WithDescription("Get details of a specific job"),
+		mcp.WithString("id",
+			mcp.Required(),
+			mcp.Description("ID of the job to retrieve"),
+		),
 	)
+
+	s.AddTool(getJobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req GetJobRequest
+		if err := request.BindArguments(&req); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+		}
+
+		if req.ID == "" {
+			return mcp.NewToolResultError("job ID is required"), nil
+		}
+
+		result, err := getJobHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonResult, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	})
 
 	// Delete job tool (only if not in readonly mode)
 	if !cfg.ReadOnly {
-		deleteJobSchema := json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"id": {
-					"type": "string",
-					"description": "ID of the job to delete"
-				}
-			},
-			"required": ["id"]
-		}`)
-
-		s.AddTool(
-			mcp.NewToolWithRawSchema("delete_job", "Delete a job from the workspace", deleteJobSchema),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				// Parse arguments
-				args, ok := request.Params.Arguments.(map[string]interface{})
-				if !ok {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{
-							mcp.NewTextContent("Invalid arguments"),
-						},
-						IsError: true,
-					}, nil
-				}
-
-				result, err := deleteJobHandler(ctx, sdkClient, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{
-							mcp.NewTextContent(err.Error()),
-						},
-						IsError: true,
-					}, nil
-				}
-
-				// Convert result to JSON
-				jsonResult, _ := json.MarshalIndent(result, "", "  ")
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent(string(jsonResult)),
-					},
-				}, nil
-			},
+		deleteJobTool := mcp.NewTool("delete_job",
+			mcp.WithDescription("Delete a job from the workspace"),
+			mcp.WithString("id",
+				mcp.Required(),
+				mcp.Description("ID of the job to delete"),
+			),
 		)
+
+		s.AddTool(deleteJobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req DeleteJobRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.ID == "" {
+				return mcp.NewToolResultError("job ID is required"), nil
+			}
+
+			result, err := deleteJobHandler(ctx, sdkClient, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			jsonResult, _ := json.MarshalIndent(result, "", "  ")
+			return mcp.NewToolResultText(string(jsonResult)), nil
+		})
 	}
 }
 
-func listJobsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func listJobsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req ListJobsRequest) (*ListJobsResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -178,9 +171,9 @@ func listJobsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, pa
 	}
 
 	// Apply optional status filter
-	statusFilter, _ := params["status"].(string)
+	statusFilter := req.Status
 
-	var filteredJobs []map[string]interface{}
+	var filteredJobs []JobInfo
 	for _, job := range jobs {
 		// Check if status filter matches
 		if statusFilter != "" {
@@ -195,43 +188,32 @@ func listJobsHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, pa
 		}
 
 		// Build job info
-		jobInfo := map[string]interface{}{
-			"id":     "",
-			"status": "",
-		}
+		jobInfo := JobInfo{}
 
 		if job.Metadata != nil && job.Metadata.Name != nil {
-			jobInfo["id"] = *job.Metadata.Name
+			jobInfo.ID = *job.Metadata.Name
+			jobInfo.Name = *job.Metadata.Name
 		}
 
 		if job.Status != nil {
-			jobInfo["status"] = *job.Status
-		}
-
-		if job.Spec != nil {
-			// Add any relevant spec fields here
+			jobInfo.Status = *job.Status
 		}
 
 		filteredJobs = append(filteredJobs, jobInfo)
 	}
 
-	return map[string]interface{}{
-		"jobs":  filteredJobs,
-		"count": len(filteredJobs),
+	return &ListJobsResponse{
+		Jobs:  filteredJobs,
+		Count: len(filteredJobs),
 	}, nil
 }
 
-func getJobHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func getJobHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetJobRequest) (*GetJobResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	id, ok := params["id"].(string)
-	if !ok || id == "" {
-		return nil, fmt.Errorf("job ID is required")
-	}
-
-	resp, err := sdkClient.GetJobWithResponse(ctx, id)
+	resp, err := sdkClient.GetJobWithResponse(ctx, req.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get job: %w", err)
 	}
@@ -254,23 +236,21 @@ func getJobHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, para
 			},
 			Status: model.Status,
 		}
-		return job, nil
+		jsonData, _ := json.MarshalIndent(job, "", "  ")
+		return &GetJobResponse{
+			Job: json.RawMessage(jsonData),
+		}, nil
 	}
 
 	return nil, fmt.Errorf("unexpected response type")
 }
 
-func deleteJobHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func deleteJobHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req DeleteJobRequest) (*DeleteJobResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	id, ok := params["id"].(string)
-	if !ok || id == "" {
-		return nil, fmt.Errorf("job ID is required")
-	}
-
-	resp, err := sdkClient.DeleteJobWithResponse(ctx, id)
+	resp, err := sdkClient.DeleteJobWithResponse(ctx, req.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete job: %w", err)
 	}
@@ -279,8 +259,8 @@ func deleteJobHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, p
 		return nil, fmt.Errorf("delete job failed with status %d", resp.StatusCode())
 	}
 
-	return map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Job '%s' deleted successfully", id),
+	return &DeleteJobResponse{
+		Success: true,
+		Message: fmt.Sprintf("Job '%s' deleted successfully", req.ID),
 	}, nil
 }

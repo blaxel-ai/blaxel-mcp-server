@@ -2,7 +2,6 @@ package local
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
@@ -10,6 +9,29 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+// Request/Response types for type safety
+type QuickStartGuideRequest struct {
+	ResourceType string `json:"resourceType,omitempty"`
+}
+
+type ListTemplatesRequest struct {
+	ResourceType string `json:"resourceType"`
+}
+
+type CreateResourceRequest struct {
+	Directory string `json:"directory"`
+	Template  string `json:"template,omitempty"`
+}
+
+type DeployResourceRequest struct {
+	Directory string `json:"directory"`
+}
+
+type RunResourceRequest struct {
+	ResourceType string `json:"resourceType"`
+	ResourceName string `json:"resourceName"`
+}
 
 // RegisterTools registers all local CLI tools
 func RegisterTools(s *server.MCPServer, cfg *config.Config) {
@@ -20,165 +42,224 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	}
 
 	// Quick start guide tool
-	s.AddTool(
-		mcp.NewToolWithRawSchema("local_quick_start_guide",
-			"Get a quick start guide for creating Blaxel resources without credentials",
-			json.RawMessage(`{"type": "object", "properties": {"resourceType": {"type": "string", "enum": ["agent", "job", "mcp-server", "sandbox", "all"], "default": "all", "description": "Type of resource to get quick start guide for"}}}`)),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			result, err := localQuickStartGuideHandler(args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-					IsError: true,
-				}, nil
-			}
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{mcp.NewTextContent(result)},
-			}, nil
-		},
+	quickStartTool := mcp.NewTool("local_quick_start_guide",
+		mcp.WithDescription("Get a quick start guide for creating Blaxel resources without credentials"),
+		mcp.WithString("resourceType",
+			mcp.Description("Type of resource to get quick start guide for (agent, job, mcp-server, sandbox, all)"),
+			mcp.Enum("agent", "job", "mcp-server", "sandbox", "all"),
+		),
 	)
 
+	s.AddTool(quickStartTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req QuickStartGuideRequest
+		if err := request.BindArguments(&req); err != nil {
+			// If binding fails, try to get resourceType directly for backward compatibility
+			req.ResourceType = request.GetString("resourceType", "all")
+		}
+
+		result, err := localQuickStartGuideHandler(req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(result), nil
+	})
+
 	// List templates tool
-	s.AddTool(
-		mcp.NewToolWithRawSchema("local_list_templates",
-			"List available templates for a specific resource type",
-			json.RawMessage(`{"type": "object", "properties": {"resourceType": {"type": "string", "enum": ["agent", "job", "sandbox", "mcp-server", "all"], "description": "Type of resource to list templates for"}}, "required": ["resourceType"]}`)),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			result, err := localListTemplatesHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-					IsError: true,
-				}, nil
-			}
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{mcp.NewTextContent(result)},
-			}, nil
-		},
+	listTemplatesTool := mcp.NewTool("local_list_templates",
+		mcp.WithDescription("List available templates for a specific resource type"),
+		mcp.WithString("resourceType",
+			mcp.Required(),
+			mcp.Description("Type of resource to list templates for"),
+			mcp.Enum("agent", "job", "sandbox", "mcp-server", "all"),
+		),
 	)
+
+	s.AddTool(listTemplatesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req ListTemplatesRequest
+		if err := request.BindArguments(&req); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+		}
+
+		if req.ResourceType == "" {
+			return mcp.NewToolResultError("resourceType is required"), nil
+		}
+
+		result, err := localListTemplatesHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(result), nil
+	})
 
 	if !cfg.ReadOnly {
 		// Create agent locally
-		s.AddTool(
-			mcp.NewToolWithRawSchema("local_create_agent",
-				"Create a new Blaxel agent app project locally using CLI",
-				json.RawMessage(`{"type": "object", "properties": {"directory": {"type": "string", "description": "Path to create agent in"}, "template": {"type": "string", "description": "Template to use"}}, "required": ["directory"]}`)),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				args, _ := request.Params.Arguments.(map[string]interface{})
-				result, err := localCreateAgentHandler(cfg, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-						IsError: true,
-					}, nil
-				}
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(result)},
-				}, nil
-			},
+		createAgentTool := mcp.NewTool("local_create_agent",
+			mcp.WithDescription("Create a new Blaxel agent app project locally using CLI"),
+			mcp.WithString("directory",
+				mcp.Required(),
+				mcp.Description("Path to create agent in"),
+			),
+			mcp.WithString("template",
+				mcp.Description("Template to use"),
+			),
 		)
+
+		s.AddTool(createAgentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req CreateResourceRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Directory == "" {
+				return mcp.NewToolResultError("directory is required"), nil
+			}
+
+			result, err := localCreateAgentHandler(cfg, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return mcp.NewToolResultText(result), nil
+		})
 
 		// Create job locally
-		s.AddTool(
-			mcp.NewToolWithRawSchema("local_create_job",
-				"Create a new Blaxel job project locally using CLI",
-				json.RawMessage(`{"type": "object", "properties": {"directory": {"type": "string", "description": "Path to create job in"}, "template": {"type": "string", "description": "Template to use"}}, "required": ["directory"]}`)),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				args, _ := request.Params.Arguments.(map[string]interface{})
-				result, err := localCreateJobHandler(cfg, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-						IsError: true,
-					}, nil
-				}
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(result)},
-				}, nil
-			},
+		createJobTool := mcp.NewTool("local_create_job",
+			mcp.WithDescription("Create a new Blaxel job project locally using CLI"),
+			mcp.WithString("directory",
+				mcp.Required(),
+				mcp.Description("Path to create job in"),
+			),
+			mcp.WithString("template",
+				mcp.Description("Template to use"),
+			),
 		)
+
+		s.AddTool(createJobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req CreateResourceRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Directory == "" {
+				return mcp.NewToolResultError("directory is required"), nil
+			}
+
+			result, err := localCreateJobHandler(cfg, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return mcp.NewToolResultText(result), nil
+		})
 
 		// Create MCP server locally
-		s.AddTool(
-			mcp.NewToolWithRawSchema("local_create_mcp_server",
-				"Create a new Blaxel MCP server project locally using CLI",
-				json.RawMessage(`{"type": "object", "properties": {"directory": {"type": "string", "description": "Path to create MCP server in"}, "template": {"type": "string", "description": "Template to use"}}, "required": ["directory"]}`)),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				args, _ := request.Params.Arguments.(map[string]interface{})
-				result, err := localCreateMCPServerHandler(cfg, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-						IsError: true,
-					}, nil
-				}
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(result)},
-				}, nil
-			},
+		createMCPServerTool := mcp.NewTool("local_create_mcp_server",
+			mcp.WithDescription("Create a new Blaxel MCP server project locally using CLI"),
+			mcp.WithString("directory",
+				mcp.Required(),
+				mcp.Description("Path to create MCP server in"),
+			),
+			mcp.WithString("template",
+				mcp.Description("Template to use"),
+			),
 		)
+
+		s.AddTool(createMCPServerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req CreateResourceRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Directory == "" {
+				return mcp.NewToolResultError("directory is required"), nil
+			}
+
+			result, err := localCreateMCPServerHandler(cfg, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return mcp.NewToolResultText(result), nil
+		})
 
 		// Create sandbox locally
-		s.AddTool(
-			mcp.NewToolWithRawSchema("local_create_sandbox",
-				"Create a new Blaxel sandbox project locally using CLI",
-				json.RawMessage(`{"type": "object", "properties": {"directory": {"type": "string", "description": "Path to create sandbox in"}, "template": {"type": "string", "description": "Template to use"}}, "required": ["directory"]}`)),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				args, _ := request.Params.Arguments.(map[string]interface{})
-				result, err := localCreateSandboxHandler(cfg, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-						IsError: true,
-					}, nil
-				}
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(result)},
-				}, nil
-			},
+		createSandboxTool := mcp.NewTool("local_create_sandbox",
+			mcp.WithDescription("Create a new Blaxel sandbox project locally using CLI"),
+			mcp.WithString("directory",
+				mcp.Required(),
+				mcp.Description("Path to create sandbox in"),
+			),
+			mcp.WithString("template",
+				mcp.Description("Template to use"),
+			),
 		)
+
+		s.AddTool(createSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req CreateResourceRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Directory == "" {
+				return mcp.NewToolResultError("directory is required"), nil
+			}
+
+			result, err := localCreateSandboxHandler(cfg, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return mcp.NewToolResultText(result), nil
+		})
 
 		// Deploy directory
-		s.AddTool(
-			mcp.NewToolWithRawSchema("local_deploy_directory",
-				"Deploy a local directory containing agent, MCP server, or job code to Blaxel",
-				json.RawMessage(`{"type": "object", "properties": {"directory": {"type": "string", "description": "Path to directory to deploy"}, "name": {"type": "string", "description": "Optional name for deployment"}, "skipBuild": {"type": "boolean", "description": "Skip the build step"}, "dryRun": {"type": "boolean", "description": "Perform a dry run without actually deploying"}}}`)),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				args, _ := request.Params.Arguments.(map[string]interface{})
-				result, err := localDeployHandler(cfg, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-						IsError: true,
-					}, nil
-				}
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(result)},
-				}, nil
-			},
+		deployTool := mcp.NewTool("local_deploy_directory",
+			mcp.WithDescription("Deploy a local directory containing agent, MCP server, or job code to Blaxel"),
+			mcp.WithString("directory",
+				mcp.Description("Path to directory to deploy"),
+			),
 		)
 
+		s.AddTool(deployTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req DeployResourceRequest
+			if err := request.BindArguments(&req); err != nil {
+				// Try to get directory for backward compatibility
+				req.Directory = request.GetString("directory", "")
+			}
+
+			result, err := localDeployHandler(cfg, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return mcp.NewToolResultText(result), nil
+		})
+
 		// Run deployed resource
-		s.AddTool(
-			mcp.NewToolWithRawSchema("local_run_deployed_resource",
-				"Run a deployed resource on Blaxel",
-				json.RawMessage(`{"type": "object", "properties": {"resourceType": {"type": "string", "enum": ["agent", "model", "job", "function"]}, "resourceName": {"type": "string"}}, "required": ["resourceType", "resourceName"]}`)),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				args, _ := request.Params.Arguments.(map[string]interface{})
-				result, err := localRunHandler(cfg, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-						IsError: true,
-					}, nil
-				}
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(result)},
-				}, nil
-			},
+		runTool := mcp.NewTool("local_run_deployed_resource",
+			mcp.WithDescription("Run a deployed resource on Blaxel"),
+			mcp.WithString("resourceType",
+				mcp.Required(),
+				mcp.Description("Type of resource to run"),
+				mcp.Enum("agent", "model", "job", "function"),
+			),
+			mcp.WithString("resourceName",
+				mcp.Required(),
+				mcp.Description("Name of the resource to run"),
+			),
 		)
+
+		s.AddTool(runTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req RunResourceRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.ResourceType == "" || req.ResourceName == "" {
+				return mcp.NewToolResultError("resourceType and resourceName are required"), nil
+			}
+
+			result, err := localRunHandler(cfg, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return mcp.NewToolResultText(result), nil
+		})
 	}
 }
 

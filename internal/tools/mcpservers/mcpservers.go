@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
@@ -11,6 +12,51 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+// Request/Response types for type safety
+type ListMCPServersRequest struct {
+	Filter string `json:"filter,omitempty"`
+}
+
+type ListMCPServersResponse struct {
+	MCPServers []MCPServerInfo `json:"mcp_servers"`
+	Count      int             `json:"count"`
+}
+
+type MCPServerInfo struct {
+	Name string `json:"name"`
+}
+
+type GetMCPServerRequest struct {
+	Name string `json:"name"`
+}
+
+type GetMCPServerResponse struct {
+	MCPServer json.RawMessage `json:"mcp_server"`
+}
+
+type CreateMCPServerRequest struct {
+	Name                      string            `json:"name"`
+	IntegrationConnectionName string            `json:"integrationConnectionName,omitempty"`
+	IntegrationType           string            `json:"integrationType,omitempty"`
+	Secret                    map[string]string `json:"secret,omitempty"`
+	Config                    map[string]string `json:"config,omitempty"`
+}
+
+type CreateMCPServerResponse struct {
+	Success   bool                   `json:"success"`
+	Message   string                 `json:"message"`
+	MCPServer map[string]interface{} `json:"mcp_server"`
+}
+
+type DeleteMCPServerRequest struct {
+	Name string `json:"name"`
+}
+
+type DeleteMCPServerResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
 
 // RegisterTools registers all MCP server-related tools
 func RegisterTools(s *server.MCPServer, cfg *config.Config) {
@@ -21,103 +67,129 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	}
 
 	// List MCP servers
-	s.AddTool(
-		mcp.NewToolWithRawSchema("list_mcp_servers",
-			"List all MCP servers (functions) in the workspace",
-			json.RawMessage(`{"type": "object", "properties": {"filter": {"type": "string", "description": "Optional filter string"}}}`)),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			result, err := listMCPServersHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-					IsError: true,
-				}, nil
-			}
-			jsonResult, _ := json.MarshalIndent(result, "", "  ")
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{mcp.NewTextContent(string(jsonResult))},
-			}, nil
-		},
+	listMCPServersTool := mcp.NewTool("list_mcp_servers",
+		mcp.WithDescription("List all MCP servers (functions) in the workspace"),
+		mcp.WithString("filter",
+			mcp.Description("Optional filter string"),
+		),
 	)
 
+	s.AddTool(listMCPServersTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req ListMCPServersRequest
+		if err := request.BindArguments(&req); err != nil {
+			// If binding fails, try to get filter directly for backward compatibility
+			req.Filter = request.GetString("filter", "")
+		}
+
+		result, err := listMCPServersHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonResult, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	})
+
 	// Get MCP server
-	s.AddTool(
-		mcp.NewToolWithRawSchema("get_mcp_server",
-			"Get details of a specific MCP server (function)",
-			json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string", "description": "Name of the MCP server"}}, "required": ["name"]}`)),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, _ := request.Params.Arguments.(map[string]interface{})
-			result, err := getMCPServerHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-					IsError: true,
-				}, nil
-			}
-			jsonResult, _ := json.MarshalIndent(result, "", "  ")
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{mcp.NewTextContent(string(jsonResult))},
-			}, nil
-		},
+	getMCPServerTool := mcp.NewTool("get_mcp_server",
+		mcp.WithDescription("Get details of a specific MCP server (function)"),
+		mcp.WithString("name",
+			mcp.Required(),
+			mcp.Description("Name of the MCP server"),
+		),
 	)
+
+	s.AddTool(getMCPServerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req GetMCPServerRequest
+		if err := request.BindArguments(&req); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+		}
+
+		if req.Name == "" {
+			return mcp.NewToolResultError("MCP server name is required"), nil
+		}
+
+		result, err := getMCPServerHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonResult, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	})
 
 	if !cfg.ReadOnly {
 		// Create MCP server
-		s.AddTool(
-			mcp.NewToolWithRawSchema("create_mcp_server",
-				"Create an MCP server (function) with flexible integration options",
-				json.RawMessage(`{
-					"type": "object",
-					"properties": {
-						"name": {"type": "string", "description": "Name for the MCP server"},
-						"integrationConnectionName": {"type": "string", "description": "Existing integration to use"},
-						"integrationType": {"type": "string", "description": "Type for new integration (e.g., github)"},
-						"secret": {"type": "object", "description": "Secrets for new integration"},
-						"config": {"type": "object", "description": "Config for new integration"}
-					},
-					"required": ["name"]
-				}`)),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				args, _ := request.Params.Arguments.(map[string]interface{})
-				result, err := createMCPServerHandler(ctx, sdkClient, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-						IsError: true,
-					}, nil
-				}
-				jsonResult, _ := json.MarshalIndent(result, "", "  ")
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(string(jsonResult))},
-				}, nil
-			},
+		createMCPServerTool := mcp.NewTool("create_mcp_server",
+			mcp.WithDescription("Create an MCP server (function) with flexible integration options"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name for the MCP server"),
+			),
+			mcp.WithString("integrationConnectionName",
+				mcp.Description("Existing integration to use"),
+			),
+			mcp.WithString("integrationType",
+				mcp.Description("Type for new integration (e.g., github)"),
+			),
+			mcp.WithObject("secret",
+				mcp.Description("Secrets for new integration"),
+			),
+			mcp.WithObject("config",
+				mcp.Description("Config for new integration"),
+			),
 		)
 
+		s.AddTool(createMCPServerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req CreateMCPServerRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Name == "" {
+				return mcp.NewToolResultError("MCP server name is required"), nil
+			}
+
+			result, err := createMCPServerHandler(ctx, sdkClient, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			jsonResult, _ := json.MarshalIndent(result, "", "  ")
+			return mcp.NewToolResultText(string(jsonResult)), nil
+		})
+
 		// Delete MCP server
-		s.AddTool(
-			mcp.NewToolWithRawSchema("delete_mcp_server",
-				"Delete an MCP server (function) by name",
-				json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string", "description": "Name of the MCP server to delete"}}, "required": ["name"]}`)),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				args, _ := request.Params.Arguments.(map[string]interface{})
-				result, err := deleteMCPServerHandler(ctx, sdkClient, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{mcp.NewTextContent(err.Error())},
-						IsError: true,
-					}, nil
-				}
-				jsonResult, _ := json.MarshalIndent(result, "", "  ")
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{mcp.NewTextContent(string(jsonResult))},
-				}, nil
-			},
+		deleteMCPServerTool := mcp.NewTool("delete_mcp_server",
+			mcp.WithDescription("Delete an MCP server (function) by name"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name of the MCP server to delete"),
+			),
 		)
+
+		s.AddTool(deleteMCPServerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req DeleteMCPServerRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Name == "" {
+				return mcp.NewToolResultError("MCP server name is required"), nil
+			}
+
+			result, err := deleteMCPServerHandler(ctx, sdkClient, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			jsonResult, _ := json.MarshalIndent(result, "", "  ")
+			return mcp.NewToolResultText(string(jsonResult)), nil
+		})
 	}
 }
 
-func listMCPServersHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func listMCPServersHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req ListMCPServersRequest) (*ListMCPServersResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -129,121 +201,140 @@ func listMCPServersHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 	if servers.JSON200 == nil {
 		return nil, fmt.Errorf("no MCP servers found")
 	}
-
-	// Apply optional filter
-	filter, _ := params["filter"].(string)
-	var filtered []map[string]interface{}
+	var filtered []MCPServerInfo
 
 	for _, server := range *servers.JSON200 {
-		if filter != "" {
+		if req.Filter != "" {
 			name := ""
 			if server.Metadata != nil && server.Metadata.Name != nil {
 				name = *server.Metadata.Name
 			}
-			if name == "" || !containsString(name, filter) {
+			if name == "" || !containsString(name, req.Filter) {
 				continue
 			}
 		}
 
-		item := map[string]interface{}{
-			"name": "",
-		}
-
+		item := MCPServerInfo{}
 		if server.Metadata != nil && server.Metadata.Name != nil {
-			item["name"] = *server.Metadata.Name
+			item.Name = *server.Metadata.Name
 		}
 
 		filtered = append(filtered, item)
 	}
 
-	return map[string]interface{}{
-		"mcp_servers": filtered,
-		"count":       len(filtered),
+	return &ListMCPServersResponse{
+		MCPServers: filtered,
+		Count:      len(filtered),
 	}, nil
 }
 
-func getMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func getMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetMCPServerRequest) (*GetMCPServerResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	name, ok := params["name"].(string)
-	if !ok || name == "" {
-		return nil, fmt.Errorf("MCP server name is required")
-	}
-
-	server, err := sdkClient.GetFunction(ctx, name)
+	server, err := sdkClient.GetFunctionWithResponse(ctx, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get MCP server: %w", err)
 	}
+	if server.JSON200 == nil {
+		return nil, fmt.Errorf("no MCP server found")
+	}
 
-	jsonData, _ := json.MarshalIndent(server, "", "  ")
-	return map[string]interface{}{
-		"mcp_server": json.RawMessage(jsonData),
+	jsonData, _ := json.MarshalIndent(*server.JSON200, "", "  ")
+	return &GetMCPServerResponse{
+		MCPServer: json.RawMessage(jsonData),
 	}, nil
 }
 
-func createMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func createMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req CreateMCPServerRequest) (*CreateMCPServerResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	name, ok := params["name"].(string)
-	if !ok || name == "" {
-		return nil, fmt.Errorf("MCP server name is required")
-	}
-
 	// Check for integration parameters
-	integrationConnectionName, hasExisting := params["integrationConnectionName"].(string)
-	integrationType, hasNewType := params["integrationType"].(string)
+	hasExisting := req.IntegrationConnectionName != ""
+	hasNewType := req.IntegrationType != ""
 
 	// Validate integration parameters
 	if hasExisting && hasNewType {
 		return nil, fmt.Errorf("specify either integrationConnectionName or integrationType, not both")
 	}
 
-	if !hasExisting && !hasNewType {
-		return nil, fmt.Errorf("must provide either integrationConnectionName (for existing) or integrationType (for new)")
+	// Build MCP server request
+	functionData := sdk.CreateFunctionJSONRequestBody{
+		Metadata: &sdk.Metadata{
+			Name: &req.Name,
+		},
+		Spec: &sdk.FunctionSpec{
+			Runtime: &sdk.Runtime{},
+		},
 	}
 
-	// If creating new integration, validate required fields
-	if hasNewType {
-		if integrationType == "" {
-			return nil, fmt.Errorf("integrationType cannot be empty")
+	// Handle integration configuration
+	if hasExisting {
+		// Use existing integration connection
+		if req.IntegrationConnectionName == "" {
+			return nil, fmt.Errorf("integrationConnectionName cannot be empty")
 		}
-		// Note: secret and config are optional and their structure depends on the integration type
+		connections := sdk.IntegrationConnectionsList{req.IntegrationConnectionName}
+		functionData.Spec.IntegrationConnections = &connections
+	} else if hasNewType {
+		// For new integration, we need to create it first, then reference it
+		// For now, return an informative error
+		return nil, fmt.Errorf("inline integration creation is not supported. Please create the integration first using 'create_integration', then reference it by name")
+	} else {
+		// No integration specified - this might be valid for some MCP servers
+		// Let the API decide if it's required
 	}
 
-	// If using existing integration, validate name
-	if hasExisting && integrationConnectionName == "" {
-		return nil, fmt.Errorf("integrationConnectionName cannot be empty")
+	// Create the MCP server
+	function, err := sdkClient.CreateFunctionWithResponse(ctx, functionData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MCP server: %w", err)
 	}
 
-	// For now, return not implemented after validation
-	return nil, fmt.Errorf("MCP server creation not yet fully implemented")
+	if function.JSON200 == nil {
+		if function.StatusCode() == 409 {
+			return nil, fmt.Errorf("MCP server with name '%s' already exists", req.Name)
+		}
+		return nil, fmt.Errorf("failed to create MCP server with status %d", function.StatusCode())
+	}
+
+	result := &CreateMCPServerResponse{
+		Success: true,
+		Message: fmt.Sprintf("MCP server '%s' created successfully", req.Name),
+		MCPServer: map[string]interface{}{
+			"name": req.Name,
+		},
+	}
+
+	// Add integration details to result
+	if hasExisting {
+		result.MCPServer["integrationConnection"] = req.IntegrationConnectionName
+	} else if hasNewType {
+		result.MCPServer["integrationType"] = req.IntegrationType
+	}
+
+	return result, nil
 }
 
-func deleteMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func deleteMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req DeleteMCPServerRequest) (*DeleteMCPServerResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	name, ok := params["name"].(string)
-	if !ok || name == "" {
-		return nil, fmt.Errorf("MCP server name is required")
-	}
-
-	_, err := sdkClient.DeleteFunctionWithResponse(ctx, name)
+	_, err := sdkClient.DeleteFunctionWithResponse(ctx, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete MCP server: %w", err)
 	}
 
-	return map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("MCP server '%s' deleted successfully", name),
+	return &DeleteMCPServerResponse{
+		Success: true,
+		Message: fmt.Sprintf("MCP server '%s' deleted successfully", req.Name),
 	}, nil
 }
 
 func containsString(s, substr string) bool {
-	return len(substr) == 0 || (len(s) >= len(substr) && s == substr)
+	return len(substr) == 0 || strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }

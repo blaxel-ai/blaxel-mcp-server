@@ -13,6 +13,50 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// Request/Response types for type safety
+type ListSandboxesRequest struct {
+	Filter string `json:"filter,omitempty"`
+}
+
+type ListSandboxesResponse struct {
+	Sandboxes []SandboxInfo `json:"sandboxes"`
+	Count     int           `json:"count"`
+}
+
+type SandboxInfo struct {
+	Name string `json:"name"`
+}
+
+type GetSandboxRequest struct {
+	Name string `json:"name"`
+}
+
+type GetSandboxResponse struct {
+	Sandbox json.RawMessage `json:"sandbox"`
+	Name    string          `json:"name"`
+}
+
+type CreateSandboxRequest struct {
+	Name   string  `json:"name"`
+	Image  string  `json:"image,omitempty"`
+	Memory float64 `json:"memory,omitempty"`
+}
+
+type CreateSandboxResponse struct {
+	Success bool                   `json:"success"`
+	Message string                 `json:"message"`
+	Sandbox map[string]interface{} `json:"sandbox"`
+}
+
+type DeleteSandboxRequest struct {
+	Name string `json:"name"`
+}
+
+type DeleteSandboxResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
 // RegisterTools registers all sandbox-related tools
 func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	// Initialize SDK client
@@ -23,126 +67,124 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	}
 
 	// List sandboxes tool
-	listSandboxesSchema := json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"filter": {
-				"type": "string",
-				"description": "Optional filter string"
-			}
-		}
-	}`)
-
-	s.AddTool(
-		mcp.NewToolWithRawSchema("list_sandboxes", "List all sandboxes in the workspace", listSandboxesSchema),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, ok := request.Params.Arguments.(map[string]interface{})
-			if !ok {
-				args = make(map[string]interface{})
-			}
-
-			result, err := listSandboxesHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent(err.Error()),
-					},
-					IsError: true,
-				}, nil
-			}
-
-			jsonResult, _ := json.MarshalIndent(result, "", "  ")
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(string(jsonResult)),
-				},
-			}, nil
-		},
+	listSandboxesTool := mcp.NewTool("list_sandboxes",
+		mcp.WithDescription("List all sandboxes in the workspace"),
+		mcp.WithString("filter",
+			mcp.Description("Optional filter string"),
+		),
 	)
+
+	s.AddTool(listSandboxesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req ListSandboxesRequest
+		if err := request.BindArguments(&req); err != nil {
+			// If binding fails, try to get filter directly for backward compatibility
+			req.Filter = request.GetString("filter", "")
+		}
+
+		result, err := listSandboxesHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonResult, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	})
 
 	// Get sandbox tool
-	getSandboxSchema := json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"name": {
-				"type": "string",
-				"description": "Name of the sandbox to retrieve"
-			}
-		},
-		"required": ["name"]
-	}`)
-
-	s.AddTool(
-		mcp.NewToolWithRawSchema("get_sandbox", "Get details of a specific sandbox", getSandboxSchema),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args, ok := request.Params.Arguments.(map[string]interface{})
-			if !ok {
-				args = make(map[string]interface{})
-			}
-
-			result, err := getSandboxHandler(ctx, sdkClient, args)
-			if err != nil {
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent(err.Error()),
-					},
-					IsError: true,
-				}, nil
-			}
-
-			jsonResult, _ := json.MarshalIndent(result, "", "  ")
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					mcp.NewTextContent(string(jsonResult)),
-				},
-			}, nil
-		},
+	getSandboxTool := mcp.NewTool("get_sandbox",
+		mcp.WithDescription("Get details of a specific sandbox"),
+		mcp.WithString("name",
+			mcp.Required(),
+			mcp.Description("Name of the sandbox to retrieve"),
+		),
 	)
+
+	s.AddTool(getSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		var req GetSandboxRequest
+		if err := request.BindArguments(&req); err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+		}
+
+		if req.Name == "" {
+			return mcp.NewToolResultError("sandbox name is required"), nil
+		}
+
+		result, err := getSandboxHandler(ctx, sdkClient, req)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonResult, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(jsonResult)), nil
+	})
 
 	// Only register write operations if not in read-only mode
 	if !cfg.ReadOnly {
-		// Delete sandbox tool
-		deleteSandboxSchema := json.RawMessage(`{
-			"type": "object",
-			"properties": {
-				"name": {
-					"type": "string",
-					"description": "Name of the sandbox to delete"
-				}
-			},
-			"required": ["name"]
-		}`)
-
-		s.AddTool(
-			mcp.NewToolWithRawSchema("delete_sandbox", "Delete a sandbox by name", deleteSandboxSchema),
-			func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				args, ok := request.Params.Arguments.(map[string]interface{})
-				if !ok {
-					args = make(map[string]interface{})
-				}
-
-				result, err := deleteSandboxHandler(ctx, sdkClient, args)
-				if err != nil {
-					return &mcp.CallToolResult{
-						Content: []mcp.Content{
-							mcp.NewTextContent(err.Error()),
-						},
-						IsError: true,
-					}, nil
-				}
-
-				jsonResult, _ := json.MarshalIndent(result, "", "  ")
-				return &mcp.CallToolResult{
-					Content: []mcp.Content{
-						mcp.NewTextContent(string(jsonResult)),
-					},
-				}, nil
-			},
+		// Create sandbox tool
+		createSandboxTool := mcp.NewTool("create_sandbox",
+			mcp.WithDescription("Create a new sandbox"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name for the sandbox"),
+			),
+			mcp.WithString("image",
+				mcp.Description("Docker image to use for the sandbox"),
+			),
+			mcp.WithNumber("memory",
+				mcp.Description("Memory in MB (default: 512)"),
+			),
 		)
+
+		s.AddTool(createSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req CreateSandboxRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Name == "" {
+				return mcp.NewToolResultError("sandbox name is required"), nil
+			}
+
+			result, err := createSandboxHandler(ctx, sdkClient, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			jsonResult, _ := json.MarshalIndent(result, "", "  ")
+			return mcp.NewToolResultText(string(jsonResult)), nil
+		})
+
+		// Delete sandbox tool
+		deleteSandboxTool := mcp.NewTool("delete_sandbox",
+			mcp.WithDescription("Delete a sandbox by name"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("Name of the sandbox to delete"),
+			),
+		)
+
+		s.AddTool(deleteSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			var req DeleteSandboxRequest
+			if err := request.BindArguments(&req); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+
+			if req.Name == "" {
+				return mcp.NewToolResultError("sandbox name is required"), nil
+			}
+
+			result, err := deleteSandboxHandler(ctx, sdkClient, req)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			jsonResult, _ := json.MarshalIndent(result, "", "  ")
+			return mcp.NewToolResultText(string(jsonResult)), nil
+		})
 	}
 }
 
-func listSandboxesHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func listSandboxesHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req ListSandboxesRequest) (*ListSandboxesResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -154,53 +196,42 @@ func listSandboxesHandler(ctx context.Context, sdkClient *sdk.ClientWithResponse
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sandboxes: %w", err)
 	}
-
-	// Apply optional filter
-	filter, _ := params["filter"].(string)
-	var filteredSandboxes []map[string]interface{}
+	var filteredSandboxes []SandboxInfo
 
 	for _, sandbox := range *sandboxes.JSON200 {
 		// Check if filter matches
-		if filter != "" {
+		if req.Filter != "" {
 			name := ""
 			if sandbox.Metadata != nil && sandbox.Metadata.Name != nil {
 				name = *sandbox.Metadata.Name
 			}
 			// Skip if name doesn't contain filter
-			if name == "" || !containsString(name, filter) {
+			if name == "" || !containsString(name, req.Filter) {
 				continue
 			}
 		}
 
 		// Build sandbox info
-		sandboxInfo := map[string]interface{}{
-			"name": "",
-		}
-
+		sandboxInfo := SandboxInfo{}
 		if sandbox.Metadata != nil && sandbox.Metadata.Name != nil {
-			sandboxInfo["name"] = *sandbox.Metadata.Name
+			sandboxInfo.Name = *sandbox.Metadata.Name
 		}
 
 		filteredSandboxes = append(filteredSandboxes, sandboxInfo)
 	}
 
-	return map[string]interface{}{
-		"sandboxes": filteredSandboxes,
-		"count":     len(filteredSandboxes),
+	return &ListSandboxesResponse{
+		Sandboxes: filteredSandboxes,
+		Count:     len(filteredSandboxes),
 	}, nil
 }
 
-func getSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func getSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req GetSandboxRequest) (*GetSandboxResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	name, ok := params["name"].(string)
-	if !ok || name == "" {
-		return nil, fmt.Errorf("sandbox name is required")
-	}
-
-	sandbox, err := sdkClient.GetSandboxWithResponse(ctx, name)
+	sandbox, err := sdkClient.GetSandboxWithResponse(ctx, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sandbox: %w", err)
 	}
@@ -210,30 +241,80 @@ func getSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, 
 
 	jsonData, _ := json.MarshalIndent(*sandbox.JSON200, "", "  ")
 
-	return map[string]interface{}{
-		"sandbox": json.RawMessage(jsonData),
-		"name":    name,
+	return &GetSandboxResponse{
+		Sandbox: json.RawMessage(jsonData),
+		Name:    req.Name,
 	}, nil
 }
 
-func deleteSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, params map[string]interface{}) (interface{}, error) {
+func createSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req CreateSandboxRequest) (*CreateSandboxResponse, error) {
 	if sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	name, ok := params["name"].(string)
-	if !ok || name == "" {
-		return nil, fmt.Errorf("sandbox name is required")
+	// Build sandbox request
+	sandboxData := sdk.CreateSandboxJSONRequestBody{
+		Metadata: &sdk.Metadata{
+			Name: &req.Name,
+		},
+		Spec: &sdk.SandboxSpec{
+			Runtime: &sdk.Runtime{},
+		},
 	}
 
-	_, err := sdkClient.DeleteSandboxWithResponse(ctx, name)
+	// Add optional image
+	if req.Image != "" {
+		sandboxData.Spec.Runtime.Image = &req.Image
+	}
+
+	// Add optional memory
+	if req.Memory > 0 {
+		mem := int(req.Memory)
+		sandboxData.Spec.Runtime.Memory = &mem
+	}
+
+	sandbox, err := sdkClient.CreateSandboxWithResponse(ctx, sandboxData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create sandbox: %w", err)
+	}
+
+	if sandbox.JSON200 == nil {
+		if sandbox.StatusCode() == 409 {
+			return nil, fmt.Errorf("sandbox with name '%s' already exists", req.Name)
+		}
+		return nil, fmt.Errorf("failed to create sandbox with status %d", sandbox.StatusCode())
+	}
+
+	result := &CreateSandboxResponse{
+		Success: true,
+		Message: fmt.Sprintf("Sandbox '%s' created successfully", req.Name),
+		Sandbox: map[string]interface{}{
+			"name": req.Name,
+		},
+	}
+
+	if sandbox.JSON200 != nil {
+		if sandbox.JSON200.Status != nil {
+			result.Sandbox["status"] = *sandbox.JSON200.Status
+		}
+	}
+
+	return result, nil
+}
+
+func deleteSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, req DeleteSandboxRequest) (*DeleteSandboxResponse, error) {
+	if sdkClient == nil {
+		return nil, fmt.Errorf("SDK client not initialized")
+	}
+
+	_, err := sdkClient.DeleteSandboxWithResponse(ctx, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete sandbox: %w", err)
 	}
 
-	return map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Sandbox '%s' deleted successfully", name),
+	return &DeleteSandboxResponse{
+		Success: true,
+		Message: fmt.Sprintf("Sandbox '%s' deleted successfully", req.Name),
 	}, nil
 }
 
