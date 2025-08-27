@@ -1,4 +1,5 @@
 .PHONY: build run clean test test-e2e test-all install deps fmt lint
+ARGS:= $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 
 # Variables
 BINARY_NAME=blaxel-mcp-server
@@ -40,7 +41,11 @@ test:
 # Run e2e tests
 test-e2e: build
 	@echo "Running e2e tests..."
-	cd e2e && go test -v ./...
+	if [ -z "$(ARGS)" ]; then \
+		cd e2e && go test -v ./... -timeout 10m; \
+	else \
+		cd e2e && go test -v ./tools/$(ARGS) -timeout 10m; \
+	fi
 
 # Run all tests
 test-all: test test-e2e
@@ -109,3 +114,6 @@ help:
 	@echo "  make dev        - Run in development mode with hot reload"
 	@echo "  make version    - Show version information"
 	@echo "  make help       - Show this help message"
+
+%:
+	@:

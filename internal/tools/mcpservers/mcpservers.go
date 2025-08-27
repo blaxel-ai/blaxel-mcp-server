@@ -9,6 +9,7 @@ import (
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/logger"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/utils"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -33,6 +34,7 @@ type CreateMCPServerRequest struct {
 	IntegrationType           string            `json:"integrationType,omitempty"`
 	Secret                    map[string]string `json:"secret,omitempty"`
 	Config                    map[string]string `json:"config,omitempty"`
+	WaitForCompletion         string            `json:"waitForCompletion,omitempty"`
 }
 
 type CreateMCPServerResponse struct {
@@ -42,13 +44,16 @@ type CreateMCPServerResponse struct {
 }
 
 type DeleteMCPServerRequest struct {
-	Name string `json:"name"`
+	Name              string `json:"name"`
+	WaitForCompletion string `json:"waitForCompletion,omitempty"`
 }
 
 type DeleteMCPServerResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
+
+// Note: Status polling functionality has been moved to internal/tools/utils/status_polling.go
 
 // RegisterTools registers all MCP server-related tools
 func RegisterTools(s *server.MCPServer, cfg *config.Config) {
@@ -128,6 +133,9 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.WithObject("config",
 				mcp.Description("Config for new integration"),
 			),
+			mcp.WithString("waitForCompletion",
+				mcp.Description("Whether to wait for the MCP server to reach a final status (true/false, default: true)"),
+			),
 		)
 
 		s.AddTool(createMCPServerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -155,6 +163,9 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name of the MCP server to delete"),
+			),
+			mcp.WithString("waitForCompletion",
+				mcp.Description("Whether to wait for the MCP server to be fully deleted (true/false, default: true)"),
 			),
 		)
 
@@ -248,14 +259,20 @@ func createMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithRespon
 	if hasExisting && hasNewType {
 		return nil, fmt.Errorf("specify either integrationConnectionName or integrationType, not both")
 	}
+	if !hasExisting && !hasNewType {
+		return nil, fmt.Errorf("must provide either integrationConnectionName to reference an existing integration or integrationType to create a new one")
+	}
 
 	// Build MCP server request
+	runtimeType := "mcp"
 	functionData := sdk.CreateFunctionJSONRequestBody{
 		Metadata: &sdk.Metadata{
 			Name: &req.Name,
 		},
 		Spec: &sdk.FunctionSpec{
-			Runtime: &sdk.Runtime{},
+			Runtime: &sdk.Runtime{
+				Type: &runtimeType,
+			},
 		},
 	}
 
@@ -331,9 +348,53 @@ func createMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithRespon
 		return nil, fmt.Errorf("failed to create MCP server with status %d", function.StatusCode())
 	}
 
+	// Check if we should wait for completion
+	waitForCompletion := true // default to true
+	if req.WaitForCompletion != "" {
+		waitForCompletion = req.WaitForCompletion == "true"
+	}
+
+	// Wait for the MCP server to reach a final status if requested
+	if waitForCompletion {
+		logger.Printf("Waiting for MCP server '%s' to deploy...", req.Name)
+		checker := utils.NewMCPServerStatusChecker(sdkClient)
+		err = utils.WaitForResourceStatus(ctx, req.Name, checker)
+		if err != nil {
+			// Even if status waiting fails, we still created the MCP server
+			// Return a warning but don't fail the entire operation
+			logger.Printf("Warning: MCP server created but status check failed: %v", err)
+			result := &CreateMCPServerResponse{
+				Success: true,
+				Message: fmt.Sprintf("MCP server '%s' created successfully (status check failed: %v)", req.Name, err),
+				MCPServer: map[string]interface{}{
+					"name": req.Name,
+				},
+			}
+
+			// Add integration details to result
+			if integrationName != "" {
+				result.MCPServer["integrationConnection"] = integrationName
+				if hasNewType {
+					result.Message = fmt.Sprintf("MCP server '%s' created successfully with inline integration '%s' (status check failed: %v)", req.Name, integrationName, err)
+					result.MCPServer["integrationType"] = req.IntegrationType
+				}
+			}
+
+			return result, nil
+		}
+	} else {
+		logger.Printf("Skipping status wait for MCP server '%s'", req.Name)
+	}
+
+	// MCP server successfully created (and deployed if we waited)
+	deploymentStatus := "created"
+	if waitForCompletion {
+		deploymentStatus = "created and deployed"
+	}
+
 	result := &CreateMCPServerResponse{
 		Success: true,
-		Message: fmt.Sprintf("MCP server '%s' created successfully", req.Name),
+		Message: fmt.Sprintf("MCP server '%s' %s successfully", req.Name, deploymentStatus),
 		MCPServer: map[string]interface{}{
 			"name": req.Name,
 		},
@@ -343,7 +404,7 @@ func createMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithRespon
 	if integrationName != "" {
 		result.MCPServer["integrationConnection"] = integrationName
 		if hasNewType {
-			result.Message = fmt.Sprintf("MCP server '%s' created successfully with inline integration '%s'", req.Name, integrationName)
+			result.Message = fmt.Sprintf("MCP server '%s' %s successfully with inline integration '%s'", req.Name, deploymentStatus, integrationName)
 			result.MCPServer["integrationType"] = req.IntegrationType
 		}
 	}
@@ -356,13 +417,44 @@ func deleteMCPServerHandler(ctx context.Context, sdkClient *sdk.ClientWithRespon
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
+	// Delete the MCP server
 	_, err := sdkClient.DeleteFunctionWithResponse(ctx, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete MCP server: %w", err)
 	}
 
+	// Check if we should wait for completion
+	waitForCompletion := true // default to true
+	if req.WaitForCompletion != "" {
+		waitForCompletion = req.WaitForCompletion == "true"
+	}
+
+	// Wait for the MCP server to be fully deleted if requested
+	if waitForCompletion {
+		logger.Printf("Waiting for MCP server '%s' to be fully deleted...", req.Name)
+		checker := utils.NewMCPServerStatusChecker(sdkClient)
+		err = utils.WaitForResourceDeletion(ctx, req.Name, checker)
+		if err != nil {
+			// Even if deletion polling fails, we still initiated the deletion
+			// Return a warning but don't fail the entire operation
+			logger.Printf("Warning: MCP server deletion initiated but status check failed: %v", err)
+			return &DeleteMCPServerResponse{
+				Success: true,
+				Message: fmt.Sprintf("MCP server '%s' deletion initiated (status check failed: %v)", req.Name, err),
+			}, nil
+		}
+	} else {
+		logger.Printf("Skipping deletion wait for MCP server '%s'", req.Name)
+	}
+
+	// MCP server successfully deleted (or deletion initiated)
+	deletionStatus := "deleted"
+	if !waitForCompletion {
+		deletionStatus = "deletion initiated"
+	}
+
 	return &DeleteMCPServerResponse{
 		Success: true,
-		Message: fmt.Sprintf("MCP server '%s' deleted successfully", req.Name),
+		Message: fmt.Sprintf("MCP server '%s' %s successfully", req.Name, deletionStatus),
 	}, nil
 }

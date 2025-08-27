@@ -27,9 +27,11 @@ type GetSandboxRequest struct {
 type GetSandboxResponse json.RawMessage
 
 type CreateSandboxRequest struct {
-	Name   string  `json:"name"`
-	Image  string  `json:"image,omitempty"`
-	Memory float64 `json:"memory,omitempty"`
+	Name   string            `json:"name"`
+	Image  string            `json:"image,omitempty"`
+	Memory float64           `json:"memory,omitempty"`
+	Env    map[string]string `json:"env,omitempty"`
+	Ports  []int             `json:"ports,omitempty"`
 }
 
 type CreateSandboxResponse struct {
@@ -121,6 +123,8 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.WithNumber("memory",
 				mcp.Description("Memory in MB (default: 512)"),
 			),
+			mcp.WithArray("ports", mcp.Description("Ports to expose from the sandbox")),
+			mcp.WithObject("env", mcp.Description("Environment variables to set in the sandbox")),
 		)
 
 		s.AddTool(createSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -254,6 +258,19 @@ func createSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponse
 		sandboxData.Spec.Runtime.Memory = &mem
 	}
 
+	// Add optional ports
+	if len(req.Ports) > 0 {
+		ports := make([]sdk.Port, len(req.Ports))
+		for _, port := range req.Ports {
+			portData := sdk.Port{
+				Target: &port,
+			}
+			ports = append(ports, portData)
+		}
+		sandboxData.Spec.Runtime.Ports = &ports
+	}
+
+	// Add optional environment variables
 	sandbox, err := sdkClient.CreateSandboxWithResponse(ctx, sandboxData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sandbox: %w", err)

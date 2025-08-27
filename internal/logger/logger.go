@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 // Logger wraps the standard logger with file output for MCP stdio mode
@@ -36,14 +35,15 @@ func Init(isStdio bool) error {
 			return fmt.Errorf("failed to get home directory: %w", err)
 		}
 
-		logDir := filepath.Join(homeDir, ".blaxel", "mcp-logs")
+		logDir := filepath.Join(homeDir, ".blaxel")
+		if os.Getenv("LOG_DIR") != "" {
+			logDir = os.Getenv("LOG_DIR")
+		}
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			return fmt.Errorf("failed to create log directory: %w", err)
 		}
 
-		// Create log file with timestamp
-		timestamp := time.Now().Format("2006-01-02_15-04-05")
-		logFile := filepath.Join(logDir, fmt.Sprintf("mcp-server-%s.log", timestamp))
+		logFile := filepath.Join(logDir, "mcp-server.log")
 
 		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {

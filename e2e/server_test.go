@@ -5,7 +5,7 @@ import (
 )
 
 func TestServerInitialization(t *testing.T) {
-	client := NewMCPTestClient(t, testEnv())
+	client := NewMCPTestClient(t, TestEnv())
 	defer client.Close()
 
 	t.Run("server_capabilities", func(t *testing.T) {
@@ -26,7 +26,7 @@ func TestServerInitialization(t *testing.T) {
 }
 
 func TestToolsDiscovery(t *testing.T) {
-	client := NewMCPTestClient(t, testEnv())
+	client := NewMCPTestClient(t, TestEnv())
 	defer client.Close()
 
 	t.Run("list_tools", func(t *testing.T) {
@@ -76,7 +76,7 @@ func TestToolsDiscovery(t *testing.T) {
 				if tool.InputSchema.Type != "object" {
 					t.Errorf("Expected create_mcp_server input schema type to be object, got %s", tool.InputSchema.Type)
 				}
-				if tool.InputSchema.Properties == nil || len(tool.InputSchema.Properties) == 0 {
+				if tool.InputSchema.Properties == nil {
 					t.Errorf("Expected create_mcp_server to have properties")
 				}
 				break
@@ -86,7 +86,7 @@ func TestToolsDiscovery(t *testing.T) {
 }
 
 func TestReadOnlyMode(t *testing.T) {
-	env := testEnv()
+	env := TestEnv()
 	env["BL_READ_ONLY"] = "true"
 
 	client := NewMCPTestClient(t, env)

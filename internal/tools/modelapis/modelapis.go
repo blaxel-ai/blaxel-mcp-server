@@ -9,6 +9,7 @@ import (
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/logger"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools"
+	"github.com/blaxel-ai/blaxel-mcp-server/internal/tools/utils"
 	"github.com/blaxel-ai/toolkit/sdk"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -34,6 +35,7 @@ type CreateModelAPIRequest struct {
 	IntegrationConnectionName string `json:"integrationConnectionName,omitempty"`
 	Provider                  string `json:"provider,omitempty"`
 	APIKey                    string `json:"apiKey,omitempty"`
+	WaitForCompletion         string `json:"waitForCompletion,omitempty"`
 }
 
 type CreateModelAPIResponse struct {
@@ -43,7 +45,8 @@ type CreateModelAPIResponse struct {
 }
 
 type DeleteModelAPIRequest struct {
-	Name string `json:"name"`
+	Name              string `json:"name"`
+	WaitForCompletion string `json:"waitForCompletion,omitempty"`
 }
 
 type DeleteModelAPIResponse struct {
@@ -135,6 +138,9 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.WithObject("config",
 				mcp.Description("Additional configuration"),
 			),
+			mcp.WithString("waitForCompletion",
+				mcp.Description("Whether to wait for the model API to reach a final status (true/false, default: true)"),
+			),
 		)
 
 		s.AddTool(createModelAPITool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -162,6 +168,9 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name of the model API to delete"),
+			),
+			mcp.WithString("waitForCompletion",
+				mcp.Description("Whether to wait for the model API to be fully deleted (true/false, default: true)"),
 			),
 		)
 
@@ -257,7 +266,11 @@ func createModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 		Metadata: &sdk.Metadata{
 			Name: &req.Name,
 		},
-		Spec: &sdk.ModelSpec{},
+		Spec: &sdk.ModelSpec{
+			Runtime: &sdk.Runtime{
+				Model: &req.Model,
+			},
+		},
 	}
 
 	// Handle integration configuration
@@ -313,7 +326,20 @@ func createModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 	// Set the integration connection on the model
 	if integrationName != "" {
 		connections := sdk.IntegrationConnectionsList{integrationName}
+
 		modelData.Spec.IntegrationConnections = &connections
+		if req.Provider != "" {
+			modelData.Spec.Runtime.Type = &req.Provider
+		} else {
+			response, err := sdkClient.GetIntegrationConnectionWithResponse(ctx, integrationName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get integration connection: %w", err)
+			}
+			if response.JSON200 == nil {
+				return nil, fmt.Errorf("no integration connection found")
+			}
+			modelData.Spec.Runtime.Type = response.JSON200.Spec.Integration
+		}
 	}
 
 	// Create the model API
@@ -329,9 +355,61 @@ func createModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 		return nil, fmt.Errorf("failed to create model API with status %d", modelResp.StatusCode())
 	}
 
+	// Check if we should wait for completion
+	waitForCompletion := true // default to true
+	if req.WaitForCompletion != "" {
+		waitForCompletion = req.WaitForCompletion == "true"
+	}
+
+	// Wait for the model API to reach a final status if requested
+	if waitForCompletion {
+		logger.Printf("Waiting for model API '%s' to deploy...", req.Name)
+		checker := utils.NewModelAPIStatusChecker(sdkClient)
+		err = utils.WaitForResourceStatus(ctx, req.Name, checker)
+		if err != nil {
+			// Even if status waiting fails, we still created the model API
+			// Return a warning but don't fail the entire operation
+			logger.Printf("Warning: Model API created but status check failed: %v", err)
+			result := &CreateModelAPIResponse{
+				Success: true,
+				Message: fmt.Sprintf("Model API '%s' created successfully (status check failed: %v)", req.Name, err),
+				ModelAPI: map[string]interface{}{
+					"name": req.Name,
+				},
+			}
+
+			// Add details to result
+			if integrationName != "" {
+				result.ModelAPI["integrationConnection"] = integrationName
+				if hasProvider {
+					result.Message = fmt.Sprintf("Model API '%s' created successfully with inline integration '%s' (status check failed: %v)", req.Name, integrationName, err)
+					result.ModelAPI["provider"] = req.Provider
+				}
+			}
+
+			if req.Model != "" {
+				result.ModelAPI["model"] = req.Model
+			}
+
+			if req.Endpoint != "" {
+				result.ModelAPI["endpoint"] = req.Endpoint
+			}
+
+			return result, nil
+		}
+	} else {
+		logger.Printf("Skipping status wait for model API '%s'", req.Name)
+	}
+
+	// Model API successfully created (and deployed if we waited)
+	deploymentStatus := "created"
+	if waitForCompletion {
+		deploymentStatus = "created and deployed"
+	}
+
 	result := &CreateModelAPIResponse{
 		Success: true,
-		Message: fmt.Sprintf("Model API '%s' created successfully", req.Name),
+		Message: fmt.Sprintf("Model API '%s' %s successfully", req.Name, deploymentStatus),
 		ModelAPI: map[string]interface{}{
 			"name": req.Name,
 		},
@@ -341,7 +419,7 @@ func createModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 	if integrationName != "" {
 		result.ModelAPI["integrationConnection"] = integrationName
 		if hasProvider {
-			result.Message = fmt.Sprintf("Model API '%s' created successfully with inline integration '%s'", req.Name, integrationName)
+			result.Message = fmt.Sprintf("Model API '%s' %s successfully with inline integration '%s'", req.Name, deploymentStatus, integrationName)
 			result.ModelAPI["provider"] = req.Provider
 		}
 	}
@@ -362,13 +440,44 @@ func deleteModelAPIHandler(ctx context.Context, sdkClient *sdk.ClientWithRespons
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
+	// Delete the model API
 	_, err := sdkClient.DeleteModelWithResponse(ctx, req.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete model API: %w", err)
 	}
 
+	// Check if we should wait for completion
+	waitForCompletion := true // default to true
+	if req.WaitForCompletion != "" {
+		waitForCompletion = req.WaitForCompletion == "true"
+	}
+
+	// Wait for the model API to be fully deleted if requested
+	if waitForCompletion {
+		logger.Printf("Waiting for model API '%s' to be fully deleted...", req.Name)
+		checker := utils.NewModelAPIStatusChecker(sdkClient)
+		err = utils.WaitForResourceDeletion(ctx, req.Name, checker)
+		if err != nil {
+			// Even if deletion polling fails, we still initiated the deletion
+			// Return a warning but don't fail the entire operation
+			logger.Printf("Warning: Model API deletion initiated but status check failed: %v", err)
+			return &DeleteModelAPIResponse{
+				Success: true,
+				Message: fmt.Sprintf("Model API '%s' deletion initiated (status check failed: %v)", req.Name, err),
+			}, nil
+		}
+	} else {
+		logger.Printf("Skipping deletion wait for model API '%s'", req.Name)
+	}
+
+	// Model API successfully deleted (or deletion initiated)
+	deletionStatus := "deleted"
+	if !waitForCompletion {
+		deletionStatus = "deletion initiated"
+	}
+
 	return &DeleteModelAPIResponse{
 		Success: true,
-		Message: fmt.Sprintf("Model API '%s' deleted successfully", req.Name),
+		Message: fmt.Sprintf("Model API '%s' %s successfully", req.Name, deletionStatus),
 	}, nil
 }

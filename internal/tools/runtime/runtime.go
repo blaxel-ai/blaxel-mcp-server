@@ -33,8 +33,9 @@ type RunJobRequest struct {
 // RunModelRequest defines the request for invoking a model
 type RunModelRequest struct {
 	Name   string      `json:"name"`
-	Prompt string      `json:"prompt,omitempty"`
-	Input  interface{} `json:"input,omitempty"`
+	Body   interface{} `json:"body"`
+	Path   string      `json:"path,omitempty"`
+	Method string      `json:"method,omitempty"`
 }
 
 // RunSandboxRequest defines the request for executing code in a sandbox
@@ -126,11 +127,12 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.Required(),
 			mcp.Description("Name of the model API to invoke"),
 		),
-		mcp.WithString("prompt",
-			mcp.Description("Prompt for text generation models"),
+		mcp.WithObject("body",
+			mcp.Required(),
+			mcp.Description("Body data for the model (structure depends on model type)"),
 		),
-		mcp.WithObject("input",
-			mcp.Description("Input data for the model (structure depends on model type)"),
+		mcp.WithString("path",
+			mcp.Description("Path of the model API to invoke"),
 		),
 	)
 
@@ -142,6 +144,15 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 
 		if req.Name == "" {
 			return mcp.NewToolResultError("model name is required"), nil
+		}
+		if req.Body == nil {
+			return mcp.NewToolResultError("body is required"), nil
+		}
+		if req.Path == "" {
+			req.Path = "/v1/chat/completions"
+		}
+		if req.Method == "" {
+			req.Method = "POST"
 		}
 
 		result, err := runModelHandler(ctx, sdkClient, cfg, req)
@@ -199,7 +210,7 @@ func runAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, cf
 
 	// Prepare the request body for the agent
 	requestBody := map[string]interface{}{
-		"message": req.Message,
+		"inputs": req.Message,
 	}
 	if req.Context != nil {
 		requestBody["context"] = req.Context
@@ -312,16 +323,10 @@ func runModelHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, cf
 
 	// Prepare the request body for the model
 	var requestBody interface{}
-	if req.Prompt != "" {
-		// Text generation model
-		requestBody = map[string]interface{}{
-			"prompt": req.Prompt,
-		}
-	} else if req.Input != nil {
-		// Other model types
-		requestBody = req.Input
+	if req.Body != nil {
+		requestBody = req.Body
 	} else {
-		return "", fmt.Errorf("either prompt or input is required")
+		return "", fmt.Errorf("body is required")
 	}
 
 	bodyBytes, err := json.Marshal(requestBody)
@@ -335,8 +340,8 @@ func runModelHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, cf
 		cfg.Workspace,
 		"model",
 		req.Name,
-		"POST",
-		"", // Path will be constructed by the Run method
+		req.Method,
+		req.Path,
 		map[string]string{"Content-Type": "application/json"},
 		nil, // No query params
 		string(bodyBytes),

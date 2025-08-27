@@ -1,8 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
+
+	"github.com/blaxel-ai/toolkit/sdk"
 )
 
 // Config holds the configuration for the MCP server
@@ -10,7 +13,8 @@ type Config struct {
 	APIEndpoint string
 	RunEndpoint string
 	Workspace   string
-
+	Env         string
+	Credentials sdk.Credentials
 	// Server configuration
 	ReadOnly bool
 	Debug    bool
@@ -19,7 +23,33 @@ type Config struct {
 // Load loads configuration from environment variables
 func Load() (*Config, error) {
 	// Check for BL_ENV to determine environment (like the CLI does)
-	env := os.Getenv("BL_ENV")
+	// Build credentials from config
+	var credentials sdk.Credentials
+	workspace := os.Getenv("BL_WORKSPACE")
+
+	// If no workspace specified in environment, use the current context from CLI config
+	if workspace == "" {
+		currentContext := sdk.CurrentContext()
+		workspace = currentContext.Workspace
+	}
+
+	if workspace == "" {
+		return nil, fmt.Errorf("no workspace found")
+	}
+
+	credentials = sdk.LoadCredentials(workspace)
+	env := sdk.LoadEnv(workspace)
+
+	// If still no valid credentials, try to use env vars directly
+	if !credentials.IsValid() {
+		if apiKey := os.Getenv("BL_API_KEY"); apiKey != "" {
+			credentials.APIKey = apiKey
+		}
+	}
+
+	if !credentials.IsValid() {
+		return nil, fmt.Errorf("no valid Blaxel credentials found (check BL_API_KEY or run 'bl login')")
+	}
 
 	// Default endpoints
 	apiEndpoint := "https://api.blaxel.ai/v0"
@@ -33,11 +63,13 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		APIEndpoint: getEnvOrDefault("BL_API_ENDPOINT", apiEndpoint),
-		RunEndpoint: getEnvOrDefault("BL_RUN_SERVER", runEndpoint),
-		Workspace:   os.Getenv("BL_WORKSPACE"),
+		APIEndpoint: apiEndpoint,
+		RunEndpoint: runEndpoint,
+		Workspace:   workspace,
+		Env:         env,
 		Debug:       os.Getenv("BL_DEBUG") == "true",
 		ReadOnly:    os.Getenv("BL_READ_ONLY") == "true",
+		Credentials: credentials,
 	}
 
 	return cfg, nil
@@ -53,11 +85,4 @@ func ParseToolsets(toolsets string) map[string]bool {
 		}
 	}
 	return result
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }
