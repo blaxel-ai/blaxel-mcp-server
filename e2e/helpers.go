@@ -54,7 +54,6 @@ func NewMCPTestClient(t *testing.T, env map[string]string) *MCPTestClient {
 		envVars = append(envVars, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	fmt.Println("envVars", envVars)
 	// Create the MCP client using stdio transport
 	stdioClient, err := client.NewStdioMCPClient(serverPath, envVars)
 	if err != nil {

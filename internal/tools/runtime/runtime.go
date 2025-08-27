@@ -19,30 +19,31 @@ import (
 
 // RunAgentRequest defines the request for running/chatting with an agent
 type RunAgentRequest struct {
-	Name    string                 `json:"name"`
-	Message string                 `json:"message"`
-	Context map[string]interface{} `json:"context,omitempty"`
+	Name    string `json:"name"`
+	Message string `json:"message"`
+	Context string `json:"context,omitempty"`
 }
 
 // RunJobRequest defines the request for triggering a job
 type RunJobRequest struct {
-	Name       string                 `json:"name"`
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Name       string `json:"name"`
+	Parameters string `json:"parameters,omitempty"`
 }
 
 // RunModelRequest defines the request for invoking a model
 type RunModelRequest struct {
-	Name   string      `json:"name"`
-	Body   interface{} `json:"body"`
-	Path   string      `json:"path,omitempty"`
-	Method string      `json:"method,omitempty"`
+	Name   string `json:"name"`
+	Body   string `json:"body"`
+	Path   string `json:"path,omitempty"`
+	Method string `json:"method,omitempty"`
 }
 
 // RunSandboxRequest defines the request for executing code in a sandbox
 type RunSandboxRequest struct {
-	Name string `json:"name"`
-	Code string `json:"code"`
-	Lang string `json:"language,omitempty"`
+	Name   string `json:"name"`
+	Body   string `json:"body"`
+	Method string `json:"method,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 // RegisterTools registers all runtime execution tools
@@ -64,8 +65,8 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.Required(),
 			mcp.Description("Message or prompt to send to the agent"),
 		),
-		mcp.WithObject("context",
-			mcp.Description("Optional context data for the agent"),
+		mcp.WithString("context",
+			mcp.Description("Optional context data for the agent (JSON string)"),
 		),
 	)
 
@@ -97,8 +98,8 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.Required(),
 			mcp.Description("Name of the job to run"),
 		),
-		mcp.WithObject("parameters",
-			mcp.Description("Optional parameters for the job"),
+		mcp.WithString("parameters",
+			mcp.Description("Optional parameters for the job (JSON string)"),
 		),
 	)
 
@@ -127,9 +128,9 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.Required(),
 			mcp.Description("Name of the model API to invoke"),
 		),
-		mcp.WithObject("body",
+		mcp.WithString("body",
 			mcp.Required(),
-			mcp.Description("Body data for the model (structure depends on model type)"),
+			mcp.Description("Body data for the model (JSON string)"),
 		),
 		mcp.WithString("path",
 			mcp.Description("Path of the model API to invoke"),
@@ -145,7 +146,7 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 		if req.Name == "" {
 			return mcp.NewToolResultError("model name is required"), nil
 		}
-		if req.Body == nil {
+		if req.Body == "" {
 			return mcp.NewToolResultError("body is required"), nil
 		}
 		if req.Path == "" {
@@ -170,12 +171,17 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.Required(),
 			mcp.Description("Name of the sandbox to use"),
 		),
-		mcp.WithString("code",
-			mcp.Required(),
-			mcp.Description("Code to execute in the sandbox"),
+		mcp.WithString("body",
+			mcp.Description("Body to use for the request (JSON string)"),
+			mcp.DefaultString("{}"),
 		),
-		mcp.WithString("language",
-			mcp.Description("Programming language (e.g., python, javascript, go)"),
+		mcp.WithString("method",
+			mcp.Description("HTTP method to use"),
+			mcp.DefaultString("POST"),
+		),
+		mcp.WithString("path",
+			mcp.Description("Path to use"),
+			mcp.DefaultString("/process"),
 		),
 	)
 
@@ -187,9 +193,6 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 
 		if req.Name == "" {
 			return mcp.NewToolResultError("sandbox name is required"), nil
-		}
-		if req.Code == "" {
-			return mcp.NewToolResultError("code is required"), nil
 		}
 
 		result, err := runSandboxHandler(ctx, sdkClient, cfg, req)
@@ -212,8 +215,12 @@ func runAgentHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, cf
 	requestBody := map[string]interface{}{
 		"inputs": req.Message,
 	}
-	if req.Context != nil {
-		requestBody["context"] = req.Context
+	if req.Context != "" {
+		// Parse context JSON string into interface{}
+		var contextData interface{}
+		if err := json.Unmarshal([]byte(req.Context), &contextData); err == nil {
+			requestBody["context"] = contextData
+		}
 	}
 
 	bodyBytes, err := json.Marshal(requestBody)
@@ -267,12 +274,9 @@ func runJobHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, cfg 
 
 	// Prepare the request body for the job
 	var bodyBytes []byte
-	if req.Parameters != nil {
-		var err error
-		bodyBytes, err = json.Marshal(req.Parameters)
-		if err != nil {
-			return "", fmt.Errorf("failed to marshal parameters: %w", err)
-		}
+	if req.Parameters != "" {
+		// Use the parameters JSON string directly
+		bodyBytes = []byte(req.Parameters)
 	} else {
 		bodyBytes = []byte("{}")
 	}
@@ -322,17 +326,8 @@ func runModelHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, cf
 	}
 
 	// Prepare the request body for the model
-	var requestBody interface{}
-	if req.Body != nil {
-		requestBody = req.Body
-	} else {
-		return "", fmt.Errorf("body is required")
-	}
-
-	bodyBytes, err := json.Marshal(requestBody)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
+	// Use the body JSON string directly
+	bodyBytes := []byte(req.Body)
 
 	// Use the SDK Run method to invoke the model
 	resp, err := sdkClient.Run(
@@ -379,17 +374,8 @@ func runSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, 
 	}
 
 	// Prepare the request body for the sandbox
-	requestBody := map[string]interface{}{
-		"code": req.Code,
-	}
-	if req.Lang != "" {
-		requestBody["language"] = req.Lang
-	}
-
-	bodyBytes, err := json.Marshal(requestBody)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
+	// Use the body JSON string directly
+	bodyBytes := []byte(req.Body)
 
 	// First, ensure the sandbox is started
 	startResp, err := sdkClient.StartSandboxWithResponse(ctx, req.Name)
@@ -406,8 +392,8 @@ func runSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponses, 
 		cfg.Workspace,
 		"sandbox",
 		req.Name,
-		"POST",
-		"execute", // Execute endpoint for sandbox
+		req.Method,
+		req.Path,
 		map[string]string{"Content-Type": "application/json"},
 		nil, // No query params
 		string(bodyBytes),
