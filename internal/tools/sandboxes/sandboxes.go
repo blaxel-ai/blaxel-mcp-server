@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/internal/config"
@@ -27,11 +29,11 @@ type GetSandboxRequest struct {
 type GetSandboxResponse json.RawMessage
 
 type CreateSandboxRequest struct {
-	Name   string            `json:"name"`
-	Image  string            `json:"image,omitempty"`
-	Memory float64           `json:"memory,omitempty"`
-	Env    map[string]string `json:"env,omitempty"`
-	Ports  []int             `json:"ports,omitempty"`
+	Name   string  `json:"name"`
+	Image  string  `json:"image,omitempty"`
+	Memory float64 `json:"memory,omitempty"`
+	Env    string  `json:"env,omitempty"`
+	Ports  string  `json:"ports,omitempty"`
 }
 
 type CreateSandboxResponse struct {
@@ -123,8 +125,8 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 			mcp.WithNumber("memory",
 				mcp.Description("Memory in MB (default: 512)"),
 			),
-			mcp.WithArray("ports", mcp.Description("Ports to expose from the sandbox")),
-			mcp.WithObject("env", mcp.Description("Environment variables to set in the sandbox")),
+			mcp.WithString("ports", mcp.Description("Ports to expose from the sandbox, separated by commas (eg. 8080,8081)")),
+			mcp.WithString("env", mcp.Description("Environment variables to set in the sandbox, separated by commas (eg. FOO=bar,BAR=baz)")),
 		)
 
 		s.AddTool(createSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -259,15 +261,32 @@ func createSandboxHandler(ctx context.Context, sdkClient *sdk.ClientWithResponse
 	}
 
 	// Add optional ports
-	if len(req.Ports) > 0 {
-		ports := make([]sdk.Port, len(req.Ports))
-		for _, port := range req.Ports {
+	if req.Ports != "" {
+		defaultProtocol := "TCP"
+		portStrings := strings.Split(req.Ports, ",")
+		ports := make([]sdk.Port, 0, len(portStrings))
+		for _, portStr := range portStrings {
+			portStr = strings.TrimSpace(portStr)
+			if portStr == "" {
+				continue
+			}
+			intPort, err := strconv.Atoi(portStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid port '%s': %w", portStr, err)
+			}
 			portData := sdk.Port{
-				Target: &port,
+				Target:   &intPort,
+				Protocol: &defaultProtocol,
 			}
 			ports = append(ports, portData)
 		}
-		sandboxData.Spec.Runtime.Ports = &ports
+		if len(ports) > 0 {
+			sandboxData.Spec.Runtime.Ports = &ports
+		}
+	}
+	// Add optional environment variables
+	if req.Env != "" {
+		sandboxData.Spec.Runtime.Envs = tools.SetRuntimeEnv(req.Env)
 	}
 
 	// Add optional environment variables

@@ -43,3 +43,18 @@ func FilterAndMarshal[T any](items *[]T, filter string, getName func(T) string) 
 func ContainsString(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
+
+func SetRuntimeEnv(env string) *[]interface{} {
+	if env == "" {
+		return nil
+	}
+	envMap := make([]interface{}, 0)
+	for _, e := range strings.Split(env, ",") {
+		parts := strings.SplitN(e, "=", 2)
+		envMap = append(envMap, map[string]interface{}{
+			"name":  parts[0],
+			"value": parts[1],
+		})
+	}
+	return &envMap
+}

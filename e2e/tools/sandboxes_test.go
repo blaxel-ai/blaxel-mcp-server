@@ -25,8 +25,11 @@ func TestSandboxesTools(t *testing.T) {
 
 			// Create a sandbox with basic configuration
 			args := map[string]interface{}{
-				"name":  testSandboxName,
-				"image": fmt.Sprintf("blaxel/%s-base:latest", env),
+				"name":   testSandboxName,
+				"image":  fmt.Sprintf("blaxel/%s-base:latest", env),
+				"memory": 4096,
+				"ports":  "8080,8081",
+				"env":    "FOO=bar,BAR=baz",
 			}
 
 			result, err := client.CallTool("create_sandbox", args)
