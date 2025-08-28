@@ -207,7 +207,7 @@ func (h *SDKHandler) CreateMCPServer(ctx context.Context, name, integrationConne
 	// Wait for the MCP server to reach a final status if requested
 	if waitForCompletionBool {
 		logger.Printf("Waiting for MCP server '%s' to deploy...", name)
-		checker := utils.NewMCPServerStatusChecker(h.sdkClient)
+		checker := NewMCPServerStatusChecker(h.sdkClient)
 		err = utils.WaitForResourceStatus(ctx, name, checker)
 		if err != nil {
 			// Even if status waiting fails, we still created the MCP server
@@ -293,7 +293,7 @@ func (h *SDKHandler) DeleteMCPServer(ctx context.Context, name, waitForCompletio
 	// Wait for the MCP server to be fully deleted if requested
 	if waitForCompletionBool {
 		logger.Printf("Waiting for MCP server '%s' to be fully deleted...", name)
-		checker := utils.NewMCPServerStatusChecker(h.sdkClient)
+		checker := NewMCPServerStatusChecker(h.sdkClient)
 		err = utils.WaitForResourceDeletion(ctx, name, checker)
 		if err != nil {
 			// Even if deletion polling fails, we still initiated the deletion
@@ -337,4 +337,38 @@ func (h *SDKHandler) DeleteMCPServer(ctx context.Context, name, waitForCompletio
 // IsReadOnly implements MCPServerHandlerWithReadOnly.IsReadOnly
 func (h *SDKHandler) IsReadOnly() bool {
 	return h.readOnly
+}
+
+// MCPServerStatusChecker implements StatusChecker for MCP servers
+type MCPServerStatusChecker struct {
+	sdkClient *sdk.ClientWithResponses
+}
+
+// NewMCPServerStatusChecker creates a new MCP server status checker
+func NewMCPServerStatusChecker(sdkClient *sdk.ClientWithResponses) *MCPServerStatusChecker {
+	return &MCPServerStatusChecker{sdkClient: sdkClient}
+}
+
+// GetResource gets the MCP server resource
+func (m *MCPServerStatusChecker) GetResource(ctx context.Context, name string) (interface{}, error) {
+	return m.sdkClient.GetFunctionWithResponse(ctx, name)
+}
+
+// ExtractStatus extracts status from MCP server response
+func (m *MCPServerStatusChecker) ExtractStatus(resource interface{}) string {
+	// Type assertion to get the function response
+	if functionResp, ok := resource.(*sdk.GetFunctionResponse); ok {
+		if functionResp.JSON200 != nil {
+			if functionResp.JSON200.Status == nil {
+				return "DEPLOYING"
+			}
+			return *functionResp.JSON200.Status
+		}
+	}
+	return "DEPLOYING" // Default assumption
+}
+
+// GetResourceType returns the resource type
+func (m *MCPServerStatusChecker) GetResourceType() utils.ResourceType {
+	return "mcp_server"
 }

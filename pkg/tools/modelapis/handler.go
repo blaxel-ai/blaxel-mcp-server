@@ -209,7 +209,7 @@ func (h *SDKHandler) CreateModelAPI(ctx context.Context, name, model, endpoint, 
 	// Wait for the model API to reach a final status if requested
 	if waitForCompletionBool {
 		logger.Printf("Waiting for model API '%s' to deploy...", name)
-		checker := utils.NewModelAPIStatusChecker(h.sdkClient)
+		checker := NewModelAPIStatusChecker(h.sdkClient)
 		err = utils.WaitForResourceStatus(ctx, name, checker)
 		if err != nil {
 			// Even if status waiting fails, we still created the model API
@@ -311,7 +311,7 @@ func (h *SDKHandler) DeleteModelAPI(ctx context.Context, name, waitForCompletion
 	// Wait for the model API to be fully deleted if requested
 	if waitForCompletionBool {
 		logger.Printf("Waiting for model API '%s' to be fully deleted...", name)
-		checker := utils.NewModelAPIStatusChecker(h.sdkClient)
+		checker := NewModelAPIStatusChecker(h.sdkClient)
 		err = utils.WaitForResourceDeletion(ctx, name, checker)
 		if err != nil {
 			// Even if deletion polling fails, we still initiated the deletion
@@ -355,4 +355,39 @@ func (h *SDKHandler) DeleteModelAPI(ctx context.Context, name, waitForCompletion
 // IsReadOnly implements ModelAPIHandlerWithReadOnly.IsReadOnly
 func (h *SDKHandler) IsReadOnly() bool {
 	return h.readOnly
+}
+
+// ModelAPIStatusChecker implements StatusChecker for model APIs
+type ModelAPIStatusChecker struct {
+	sdkClient *sdk.ClientWithResponses
+}
+
+// NewModelAPIStatusChecker creates a new model API status checker
+func NewModelAPIStatusChecker(sdkClient *sdk.ClientWithResponses) *ModelAPIStatusChecker {
+	return &ModelAPIStatusChecker{sdkClient: sdkClient}
+}
+
+// GetResource gets the model API resource
+func (m *ModelAPIStatusChecker) GetResource(ctx context.Context, name string) (interface{}, error) {
+	return m.sdkClient.GetModelWithResponse(ctx, name)
+}
+
+// ExtractStatus extracts status from model API response
+func (m *ModelAPIStatusChecker) ExtractStatus(resource interface{}) string {
+	// Type assertion to get the model response
+	if modelResp, ok := resource.(*sdk.GetModelResponse); ok {
+		if modelResp.JSON200 != nil {
+			if modelResp.JSON200.Status == nil {
+				return "DEPLOYING"
+			}
+			return *modelResp.JSON200.Status
+		}
+	}
+	logger.Printf("Model API could not be extracted: %+v", resource)
+	return "DEPLOYING" // Default assumption
+}
+
+// GetResourceType returns the resource type
+func (m *ModelAPIStatusChecker) GetResourceType() utils.ResourceType {
+	return "model_api"
 }
