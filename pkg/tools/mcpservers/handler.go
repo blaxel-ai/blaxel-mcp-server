@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
@@ -66,8 +67,14 @@ func (h *SDKHandler) ListMCPServers(ctx context.Context, filter string) ([]byte,
 		functions = filtered
 	}
 
+	// Convert SDK functions to simple models
+	functionModels := make([]formatter.FunctionModel, len(functions))
+	for i, function := range functions {
+		functionModels[i] = convertToFunctionModel(function)
+	}
+
 	// Format the functions using the formatter
-	formatted := formatter.FormatFunctions(functions)
+	formatted := formatter.FormatFunctions(functionModels)
 	return []byte(formatted), nil
 }
 
@@ -371,4 +378,56 @@ func (m *MCPServerStatusChecker) ExtractStatus(resource interface{}) string {
 // GetResourceType returns the resource type
 func (m *MCPServerStatusChecker) GetResourceType() utils.ResourceType {
 	return "mcp_server"
+}
+
+// convertToFunctionModel converts an SDK function to a simple function model
+func convertToFunctionModel(function sdk.Function) formatter.FunctionModel {
+	model := formatter.FunctionModel{
+		Name:   "",
+		Status: "",
+		Labels: make(map[string]string),
+	}
+
+	// Extract name
+	if function.Metadata != nil && function.Metadata.Name != nil {
+		model.Name = *function.Metadata.Name
+	}
+
+	// Extract status
+	if function.Status != nil {
+		model.Status = *function.Status
+	}
+
+	// Extract labels
+	if function.Metadata != nil && function.Metadata.Labels != nil {
+		model.Labels = *function.Metadata.Labels
+	}
+
+	// Extract runtime spec
+	if function.Spec != nil && function.Spec.Runtime != nil {
+		if function.Spec.Runtime.Image != nil {
+			model.Image = function.Spec.Runtime.Image
+		}
+		if function.Spec.Runtime.Generation != nil {
+			model.Generation = function.Spec.Runtime.Generation
+		}
+		if function.Spec.Runtime.Memory != nil {
+			model.Memory = function.Spec.Runtime.Memory
+		}
+	}
+
+	// Extract integration connections
+	if function.Spec != nil && function.Spec.IntegrationConnections != nil {
+		model.IntegrationConnections = *function.Spec.IntegrationConnections
+	}
+
+	// Extract creation time
+	if function.Metadata != nil && function.Metadata.CreatedAt != nil {
+		// Parse the time string to time.Time
+		if createdAt, err := time.Parse(time.RFC3339, *function.Metadata.CreatedAt); err == nil {
+			model.CreatedAt = &createdAt
+		}
+	}
+
+	return model
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
@@ -64,8 +65,14 @@ func (h *SDKHandler) ListIntegrations(ctx context.Context, filter string) ([]byt
 		integrations = filtered
 	}
 
+	// Convert SDK integrations to simple models
+	integrationModels := make([]formatter.IntegrationModel, len(integrations))
+	for i, integration := range integrations {
+		integrationModels[i] = convertToIntegrationModel(integration)
+	}
+
 	// Format the integrations using the formatter
-	formatted := formatter.FormatIntegrations(integrations)
+	formatted := formatter.FormatIntegrations(integrationModels)
 	return []byte(formatted), nil
 }
 
@@ -175,4 +182,44 @@ func (h *SDKHandler) DeleteIntegration(ctx context.Context, name string) ([]byte
 // IsReadOnly implements IntegrationHandlerWithReadOnly.IsReadOnly
 func (h *SDKHandler) IsReadOnly() bool {
 	return h.readOnly
+}
+
+// convertToIntegrationModel converts an SDK integration to a simple integration model
+func convertToIntegrationModel(integration sdk.IntegrationConnection) formatter.IntegrationModel {
+	model := formatter.IntegrationModel{
+		Name:    "",
+		Secrets: make(map[string]string),
+		Config:  make(map[string]string),
+		Labels:  make(map[string]string),
+	}
+
+	// Extract name
+	if integration.Metadata != nil && integration.Metadata.Name != nil {
+		model.Name = *integration.Metadata.Name
+	}
+
+	// Extract labels
+	if integration.Metadata != nil && integration.Metadata.Labels != nil {
+		model.Labels = *integration.Metadata.Labels
+	}
+
+	// Extract secrets
+	if integration.Spec != nil && integration.Spec.Secret != nil {
+		model.Secrets = *integration.Spec.Secret
+	}
+
+	// Extract config
+	if integration.Spec != nil && integration.Spec.Config != nil {
+		model.Config = *integration.Spec.Config
+	}
+
+	// Extract creation time
+	if integration.Metadata != nil && integration.Metadata.CreatedAt != nil {
+		// Parse the time string to time.Time
+		if createdAt, err := time.Parse(time.RFC3339, *integration.Metadata.CreatedAt); err == nil {
+			model.CreatedAt = &createdAt
+		}
+	}
+
+	return model
 }

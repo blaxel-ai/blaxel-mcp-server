@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
@@ -63,8 +64,14 @@ func (h *SDKHandler) ListJobs(ctx context.Context, status string) ([]byte, error
 		jobs = filtered
 	}
 
+	// Convert SDK jobs to simple models
+	jobModels := make([]formatter.JobModel, len(jobs))
+	for i, job := range jobs {
+		jobModels[i] = convertToJobModel(job)
+	}
+
 	// Format the jobs using the formatter
-	formatted := formatter.FormatJobs(jobs)
+	formatted := formatter.FormatJobs(jobModels)
 	return []byte(formatted), nil
 }
 
@@ -127,4 +134,54 @@ func (h *SDKHandler) DeleteJob(ctx context.Context, id string) ([]byte, error) {
 // IsReadOnly implements JobHandlerWithReadOnly.IsReadOnly
 func (h *SDKHandler) IsReadOnly() bool {
 	return h.readOnly
+}
+
+// convertToJobModel converts an SDK job to a simple job model
+func convertToJobModel(job sdk.Job) formatter.JobModel {
+	model := formatter.JobModel{
+		Name:   "",
+		Status: "",
+		Labels: make(map[string]string),
+	}
+
+	// Extract name
+	if job.Metadata != nil && job.Metadata.Name != nil {
+		model.Name = *job.Metadata.Name
+	}
+
+	// Extract status
+	if job.Status != nil {
+		model.Status = *job.Status
+	}
+
+	// Extract labels
+	if job.Metadata != nil && job.Metadata.Labels != nil {
+		model.Labels = *job.Metadata.Labels
+	}
+
+	// Extract runtime spec
+	if job.Spec != nil && job.Spec.Runtime != nil {
+		if job.Spec.Runtime.Image != nil {
+			model.Image = job.Spec.Runtime.Image
+		}
+		if job.Spec.Runtime.Memory != nil {
+			model.Memory = job.Spec.Runtime.Memory
+		}
+		if job.Spec.Runtime.MaxConcurrentTasks != nil {
+			model.MaxTasks = job.Spec.Runtime.MaxConcurrentTasks
+		}
+		if job.Spec.Runtime.MaxRetries != nil {
+			model.MaxRetries = job.Spec.Runtime.MaxRetries
+		}
+	}
+
+	// Extract creation time
+	if job.Metadata != nil && job.Metadata.CreatedAt != nil {
+		// Parse the time string to time.Time
+		if createdAt, err := time.Parse(time.RFC3339, *job.Metadata.CreatedAt); err == nil {
+			model.CreatedAt = &createdAt
+		}
+	}
+
+	return model
 }

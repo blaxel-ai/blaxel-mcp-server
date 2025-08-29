@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/formatter"
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
@@ -57,8 +58,14 @@ func (h *SDKAgentHandler) ListAgents(ctx context.Context, filter string) ([]byte
 		agents = filtered
 	}
 
+	// Convert SDK agents to simple models
+	agentModels := make([]formatter.AgentModel, len(agents))
+	for i, agent := range agents {
+		agentModels[i] = convertToAgentModel(agent)
+	}
+
 	// Format the agents using the formatter
-	formatted := formatter.FormatAgents(agents)
+	formatted := formatter.FormatAgents(agentModels)
 	return []byte(formatted), nil
 }
 
@@ -121,4 +128,54 @@ func (h *SDKAgentHandler) DeleteAgent(ctx context.Context, name string) ([]byte,
 // IsReadOnly implements AgentHandlerWithReadOnly.IsReadOnly
 func (h *SDKAgentHandler) IsReadOnly() bool {
 	return h.readOnly
+}
+
+// convertToAgentModel converts an SDK agent to a simple agent model
+func convertToAgentModel(agent sdk.Agent) formatter.AgentModel {
+	model := formatter.AgentModel{
+		Name:   "",
+		Status: "",
+		Labels: make(map[string]string),
+	}
+
+	// Extract name
+	if agent.Metadata != nil && agent.Metadata.Name != nil {
+		model.Name = *agent.Metadata.Name
+	}
+
+	// Extract status
+	if agent.Status != nil {
+		model.Status = *agent.Status
+	}
+
+	// Extract labels
+	if agent.Metadata != nil && agent.Metadata.Labels != nil {
+		model.Labels = *agent.Metadata.Labels
+	}
+
+	// Extract runtime spec
+	if agent.Spec != nil && agent.Spec.Runtime != nil {
+		if agent.Spec.Runtime.Image != nil {
+			model.Image = agent.Spec.Runtime.Image
+		}
+		if agent.Spec.Runtime.Generation != nil {
+			model.Generation = agent.Spec.Runtime.Generation
+		}
+		if agent.Spec.Runtime.Memory != nil {
+			model.Memory = agent.Spec.Runtime.Memory
+		}
+		if agent.Spec.Runtime.MaxConcurrentTasks != nil {
+			model.MaxTasks = agent.Spec.Runtime.MaxConcurrentTasks
+		}
+	}
+
+	// Extract creation time
+	if agent.Metadata != nil && agent.Metadata.CreatedAt != nil {
+		// Parse the time string to time.Time
+		if createdAt, err := time.Parse(time.RFC3339, *agent.Metadata.CreatedAt); err == nil {
+			model.CreatedAt = &createdAt
+		}
+	}
+
+	return model
 }

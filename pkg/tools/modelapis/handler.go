@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
@@ -66,8 +67,14 @@ func (h *SDKHandler) ListModelAPIs(ctx context.Context, filter string) ([]byte, 
 		models = filtered
 	}
 
+	// Convert SDK models to simple models
+	modelModels := make([]formatter.ModelAPI, len(models))
+	for i, model := range models {
+		modelModels[i] = convertToModelAPIModel(model)
+	}
+
 	// Format the models using the formatter
-	formatted := formatter.FormatModels(models)
+	formatted := formatter.FormatModels(modelModels)
 	return []byte(formatted), nil
 }
 
@@ -390,4 +397,51 @@ func (m *ModelAPIStatusChecker) ExtractStatus(resource interface{}) string {
 // GetResourceType returns the resource type
 func (m *ModelAPIStatusChecker) GetResourceType() utils.ResourceType {
 	return "model_api"
+}
+
+// convertToModelAPIModel converts an SDK model to a simple model API model
+func convertToModelAPIModel(model sdk.Model) formatter.ModelAPI {
+	modelAPI := formatter.ModelAPI{
+		Name:   "",
+		Status: "",
+		Labels: make(map[string]string),
+	}
+
+	// Extract name
+	if model.Metadata != nil && model.Metadata.Name != nil {
+		modelAPI.Name = *model.Metadata.Name
+	}
+
+	// Extract status
+	if model.Status != nil {
+		modelAPI.Status = *model.Status
+	}
+
+	// Extract labels
+	if model.Metadata != nil && model.Metadata.Labels != nil {
+		modelAPI.Labels = *model.Metadata.Labels
+	}
+
+	// Extract runtime spec
+	if model.Spec != nil && model.Spec.Runtime != nil {
+		if model.Spec.Runtime.Type != nil {
+			modelAPI.Type = model.Spec.Runtime.Type
+		}
+		if model.Spec.Runtime.Model != nil {
+			modelAPI.ModelName = model.Spec.Runtime.Model
+		}
+		if model.Spec.Runtime.Memory != nil {
+			modelAPI.Memory = model.Spec.Runtime.Memory
+		}
+	}
+
+	// Extract creation time
+	if model.Metadata != nil && model.Metadata.CreatedAt != nil {
+		// Parse the time string to time.Time
+		if createdAt, err := time.Parse(time.RFC3339, *model.Metadata.CreatedAt); err == nil {
+			modelAPI.CreatedAt = &createdAt
+		}
+	}
+
+	return modelAPI
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
@@ -66,8 +67,14 @@ func (h *SDKHandler) ListSandboxes(ctx context.Context, filter string) ([]byte, 
 		sandboxes = filtered
 	}
 
+	// Convert SDK sandboxes to simple models
+	sandboxModels := make([]formatter.SandboxModel, len(sandboxes))
+	for i, sandbox := range sandboxes {
+		sandboxModels[i] = convertToSandboxModel(sandbox)
+	}
+
 	// Format the sandboxes using the formatter
-	formatted := formatter.FormatSandboxes(sandboxes)
+	formatted := formatter.FormatSandboxes(sandboxModels)
 	return []byte(formatted), nil
 }
 
@@ -212,4 +219,64 @@ func (h *SDKHandler) DeleteSandbox(ctx context.Context, name string) ([]byte, er
 // IsReadOnly implements SandboxHandlerWithReadOnly.IsReadOnly
 func (h *SDKHandler) IsReadOnly() bool {
 	return h.readOnly
+}
+
+// convertToSandboxModel converts an SDK sandbox to a simple sandbox model
+func convertToSandboxModel(sandbox sdk.Sandbox) formatter.SandboxModel {
+	model := formatter.SandboxModel{
+		Name:   "",
+		Status: "",
+		Labels: make(map[string]string),
+	}
+
+	// Extract name
+	if sandbox.Metadata != nil && sandbox.Metadata.Name != nil {
+		model.Name = *sandbox.Metadata.Name
+	}
+
+	// Extract status
+	if sandbox.Status != nil {
+		model.Status = *sandbox.Status
+	}
+
+	// Extract labels
+	if sandbox.Metadata != nil && sandbox.Metadata.Labels != nil {
+		model.Labels = *sandbox.Metadata.Labels
+	}
+
+	// Extract runtime spec
+	if sandbox.Spec != nil && sandbox.Spec.Runtime != nil {
+		if sandbox.Spec.Runtime.Image != nil {
+			model.Image = sandbox.Spec.Runtime.Image
+		}
+		if sandbox.Spec.Runtime.Generation != nil {
+			model.Generation = sandbox.Spec.Runtime.Generation
+		}
+		if sandbox.Spec.Runtime.Memory != nil {
+			model.Memory = sandbox.Spec.Runtime.Memory
+		}
+		if sandbox.Spec.Runtime.Ttl != nil {
+			model.TTL = sandbox.Spec.Runtime.Ttl
+		}
+		if sandbox.Spec.Runtime.Expires != nil {
+			// Parse the time string to time.Time
+			if expires, err := time.Parse(time.RFC3339, *sandbox.Spec.Runtime.Expires); err == nil {
+				model.Expires = &expires
+			}
+		}
+		// Note: Ports conversion skipped due to SDK type complexity
+		// if sandbox.Spec.Runtime.Ports != nil {
+		// 	model.Ports = convertPorts(*sandbox.Spec.Runtime.Ports)
+		// }
+	}
+
+	// Extract creation time
+	if sandbox.Metadata != nil && sandbox.Metadata.CreatedAt != nil {
+		// Parse the time string to time.Time
+		if createdAt, err := time.Parse(time.RFC3339, *sandbox.Metadata.CreatedAt); err == nil {
+			model.CreatedAt = &createdAt
+		}
+	}
+
+	return model
 }
