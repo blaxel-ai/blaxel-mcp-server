@@ -307,46 +307,22 @@ setup_mcp_config() {
     return
   fi
 
-  local response=""
-  if [ -t 0 ]; then
-    printf "Would you like to configure ${BINARY} for an agentic application? [y/N] "
-    read -r response
-  elif [ -e /dev/tty ]; then
-    printf "Would you like to configure ${BINARY} for an agentic application? [y/N] " > /dev/tty
-    read -r response < /dev/tty
-  else
-    response="n"
-  fi
-
-  case "$response" in
-    [yY]|[yY][eE][sS])
-      select_and_configure_app "$binary_path"
-      ;;
-    *)
-      print_mcp_instructions "$binary_path"
-      ;;
-  esac
-}
-
-select_and_configure_app() {
-  local binary_path="$1"
-
-  echo ""
   echo "Select the application to configure:"
   echo "  1) Cursor"
-  echo "  2) Claude Code (claude_desktop_config.json)"
-  echo "  3) Show manual instructions for all"
+  echo "  2) Claude Code"
+  echo "  3) Show manual instructions"
+  echo "  0) Skip"
   echo ""
 
   local choice=""
   if [ -t 0 ]; then
-    printf "Enter your choice [1-3]: "
+    printf "Enter your choice [0-3]: "
     read -r choice
   elif [ -e /dev/tty ]; then
-    printf "Enter your choice [1-3]: " > /dev/tty
+    printf "Enter your choice [0-3]: " > /dev/tty
     read -r choice < /dev/tty
   else
-    choice="3"
+    choice="0"
   fi
 
   case "$choice" in
@@ -356,62 +332,70 @@ select_and_configure_app() {
     2)
       configure_claude_code "$binary_path"
       ;;
-    *)
+    3)
       print_mcp_instructions "$binary_path"
       ;;
+    *)
+      echo ""
+      echo "Skipping MCP configuration."
+      echo "You can configure it later by following the instructions in the README."
+      ;;
   esac
+}
+
+generate_cursor_deeplink() {
+  local binary_path="$1"
+  local config_json="{\"command\":\"${binary_path}\",\"env\":{\"BL_API_KEY\":\"YOUR_API_KEY\",\"BL_WORKSPACE\":\"YOUR_WORKSPACE\"}}"
+
+  # Base64 encode the config (use printf for portability - echo -n doesn't work in all shells)
+  local encoded_config=""
+  if is_command base64; then
+    # Check if base64 supports -w flag (Linux) or not (macOS)
+    if base64 --help 2>&1 | grep -q "\-w"; then
+      encoded_config=$(printf '%s' "$config_json" | base64 -w 0)
+    else
+      encoded_config=$(printf '%s' "$config_json" | base64 | tr -d '\n')
+    fi
+  else
+    echo "Warning: base64 command not found, cannot generate deeplink"
+    return 1
+  fi
+
+  echo "cursor://anysphere.cursor-deeplink/mcp/install?name=blaxel&config=${encoded_config}"
 }
 
 configure_cursor() {
   local binary_path="$1"
-  local config_dir=""
-  local config_file=""
+  local os=$(uname_os)
 
-  os=$(uname_os)
+  echo ""
+  echo "Configuring Cursor..."
+
+  # Generate the deeplink
+  local deeplink=$(generate_cursor_deeplink "$binary_path")
+  if [ -z "$deeplink" ]; then
+    echo "Error: Could not generate Cursor deeplink"
+    return 1
+  fi
+
+  # Open the deeplink based on OS
   case "$os" in
     darwin)
-      config_dir="$HOME/.cursor"
+      open "$deeplink" 2>/dev/null
       ;;
     linux)
-      config_dir="$HOME/.cursor"
+      xdg-open "$deeplink" 2>/dev/null || sensible-browser "$deeplink" 2>/dev/null
       ;;
     windows|mingw*|msys*)
-      config_dir="$APPDATA/Cursor"
+      start "$deeplink" 2>/dev/null || cmd /c start "$deeplink" 2>/dev/null
       ;;
   esac
 
-  config_file="${config_dir}/mcp.json"
-
+  echo "deeplink: $deeplink"
   echo ""
-  echo "Configuring Cursor MCP settings..."
-
-  # Create config directory if needed
-  mkdir -p "$config_dir"
-
-  # Create or update config
-  if [ -f "$config_file" ]; then
-    echo "Found existing config at $config_file"
-    echo "Please add the following to your mcpServers section:"
-    echo ""
-    print_cursor_config "$binary_path"
-  else
-    cat > "$config_file" << EOFCONFIG
-{
-  "mcpServers": {
-    "blaxel": {
-      "command": "${binary_path}",
-      "args": ["--toolsets", "all"]
-    }
-  }
-}
-EOFCONFIG
-    echo "Created Cursor MCP config at $config_file"
-  fi
-
+  echo "Cursor should now prompt you to install the Blaxel MCP server."
   echo ""
-  echo "Note: You need to authenticate with Blaxel before using the MCP server."
-  echo "Run: bl login <workspace>"
-  echo "Or set environment variables: BL_API_KEY and BL_WORKSPACE"
+  echo "Don't forget to replace YOUR_API_KEY and YOUR_WORKSPACE with your actual values."
 }
 
 configure_claude_code() {
@@ -448,18 +432,18 @@ configure_claude_code() {
   "mcpServers": {
     "blaxel": {
       "command": "${binary_path}",
-      "args": ["--toolsets", "all"]
+      "env": {
+        "BL_API_KEY": "YOUR_API_KEY",
+        "BL_WORKSPACE": "YOUR_WORKSPACE"
+      }
     }
   }
 }
 EOFCONFIG
     echo "Created Claude Code MCP config at $config_file"
+    echo ""
+    echo "Don't forget to replace YOUR_API_KEY and YOUR_WORKSPACE with your actual values in $config_file"
   fi
-
-  echo ""
-  echo "Note: You need to authenticate with Blaxel before using the MCP server."
-  echo "Run: bl login <workspace>"
-  echo "Or set environment variables: BL_API_KEY and BL_WORKSPACE"
 }
 
 print_cursor_config() {
@@ -468,7 +452,10 @@ print_cursor_config() {
 {
   "blaxel": {
     "command": "${binary_path}",
-    "args": ["--toolsets", "all"]
+    "env": {
+      "BL_API_KEY": "YOUR_API_KEY",
+      "BL_WORKSPACE": "YOUR_WORKSPACE"
+    }
   }
 }
 EOF
@@ -480,7 +467,10 @@ print_claude_config() {
 {
   "blaxel": {
     "command": "${binary_path}",
-    "args": ["--toolsets", "all"]
+    "env": {
+      "BL_API_KEY": "YOUR_API_KEY",
+      "BL_WORKSPACE": "YOUR_WORKSPACE"
+    }
   }
 }
 EOF
@@ -490,21 +480,38 @@ print_mcp_instructions() {
   local binary_path="$1"
 
   echo ""
-  echo "To use ${BINARY} with Cursor, add to ~/.cursor/mcp.json:"
+  echo "=== CURSOR ==="
+  echo ""
+
+  # Generate and display the deeplink
+  local deeplink=$(generate_cursor_deeplink "$binary_path")
+  if [ -n "$deeplink" ]; then
+    echo "One-click install (recommended):"
+    echo "  $deeplink"
+    echo ""
+    echo "Or add manually to ~/.cursor/mcp.json:"
+  else
+    echo "Add to ~/.cursor/mcp.json:"
+  fi
   echo ""
   cat << EOF
 {
   "mcpServers": {
     "blaxel": {
       "command": "${binary_path}",
-      "args": ["--toolsets", "all"]
+      "env": {
+        "BL_API_KEY": "YOUR_API_KEY",
+        "BL_WORKSPACE": "YOUR_WORKSPACE"
+      }
     }
   }
 }
 EOF
 
   echo ""
-  echo "To use ${BINARY} with Claude Code, add to claude_desktop_config.json:"
+  echo "=== CLAUDE CODE ==="
+  echo ""
+  echo "Add to claude_desktop_config.json:"
   echo "  - macOS: ~/Library/Application Support/Claude/claude_desktop_config.json"
   echo "  - Linux: ~/.config/Claude/claude_desktop_config.json"
   echo "  - Windows: %APPDATA%/Claude/claude_desktop_config.json"
@@ -514,16 +521,17 @@ EOF
   "mcpServers": {
     "blaxel": {
       "command": "${binary_path}",
-      "args": ["--toolsets", "all"]
+      "env": {
+        "BL_API_KEY": "YOUR_API_KEY",
+        "BL_WORKSPACE": "YOUR_WORKSPACE"
+      }
     }
   }
 }
 EOF
 
   echo ""
-  echo "Authentication:"
-  echo "  Option 1 (recommended): bl login <workspace>"
-  echo "  Option 2: Set BL_API_KEY and BL_WORKSPACE environment variables"
+  echo "Replace YOUR_API_KEY and YOUR_WORKSPACE with your actual Blaxel credentials."
 }
 
 # Main installation function
