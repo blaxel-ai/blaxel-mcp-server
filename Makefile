@@ -115,5 +115,9 @@ help:
 	@echo "  make version    - Show version information"
 	@echo "  make help       - Show this help message"
 
+tag:
+	git tag -a v$(ARGS) -m "Release v$(ARGS)"
+	git push origin v$(ARGS)
+
 %:
 	@:
