@@ -28,6 +28,10 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler) {
 	// List agents tool
 	listAgentsTool := mcp.NewTool("list_agents",
 		mcp.WithDescription("List all agents in the workspace"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("filter",
 			mcp.Description("Optional filter string to match agent names"),
 		),
@@ -47,6 +51,10 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler) {
 	// Get agent tool
 	getAgentTool := mcp.NewTool("get_agent",
 		mcp.WithDescription("Get details of a specific agent"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("name",
 			mcp.Required(),
 			mcp.Description("Name of the agent to retrieve"),
@@ -71,6 +79,10 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler) {
 	if !isReadOnly {
 		deleteAgentTool := mcp.NewTool("delete_agent",
 			mcp.WithDescription("Delete an agent from the workspace"),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name of the agent to delete"),

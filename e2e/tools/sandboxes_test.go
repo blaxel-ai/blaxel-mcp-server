@@ -1,8 +1,6 @@
 package tools
 
 import (
-	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -12,10 +10,6 @@ import (
 func TestSandboxesTools(t *testing.T) {
 	client := e2e.NewMCPTestClient(t, e2e.TestEnv())
 	defer client.Close()
-	env := os.Getenv("BL_ENV")
-	if env == "" {
-		env = "prod"
-	}
 
 	// Generate random test names to avoid conflicts
 	testSandboxName := e2e.GenerateRandomTestName("test-sandbox")
@@ -26,9 +20,7 @@ func TestSandboxesTools(t *testing.T) {
 			// Create a sandbox with basic configuration
 			args := map[string]interface{}{
 				"name":   testSandboxName,
-				"image":  fmt.Sprintf("blaxel/%s-base:latest", env),
 				"memory": 4096,
-				"ports":  "8080,8081",
 				"env":    "FOO=bar,BAR=baz",
 			}
 
@@ -37,19 +29,9 @@ func TestSandboxesTools(t *testing.T) {
 				t.Fatalf("Failed to call create_sandbox: %v", err)
 			}
 
-			// Check if the tool returned an error
 			isError, errorMsg := e2e.CheckToolError(result)
 			if isError {
-				// Check if it's an expected error (like already exists or auth issues)
-				if strings.Contains(errorMsg, "already exists") {
-					t.Logf("Sandbox already exists, continuing with test: %s", errorMsg)
-					return
-				} else if strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
-					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {
-					t.Logf("API call failed as expected with test credentials: %s", errorMsg)
-					return
-				}
-				t.Fatalf("Unexpected error from create_sandbox: %s", errorMsg)
+				t.Fatalf("Failed to create sandbox: %s", errorMsg)
 			}
 
 			t.Logf("Successfully created sandbox: %s", testSandboxName)
@@ -63,16 +45,9 @@ func TestSandboxesTools(t *testing.T) {
 				t.Fatalf("Failed to call list_sandboxes: %v", err)
 			}
 
-			// Check if the tool returned an error
 			isError, errorMsg := e2e.CheckToolError(result)
 			if isError {
-				// API errors are expected with test credentials
-				if strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
-					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {
-					t.Logf("API call failed as expected with test credentials: %s", errorMsg)
-					return
-				}
-				t.Fatalf("Unexpected error from list_sandboxes: %s", errorMsg)
+				t.Fatalf("Failed to list sandboxes: %s", errorMsg)
 			}
 
 			t.Logf("Successfully listed sandboxes")
@@ -88,17 +63,9 @@ func TestSandboxesTools(t *testing.T) {
 				t.Fatalf("Failed to call get_sandbox: %v", err)
 			}
 
-			// Check if the tool returned an error
 			isError, errorMsg := e2e.CheckToolError(result)
 			if isError {
-				// Check if it's an expected error
-				if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "404") ||
-					strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
-					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {
-					t.Logf("API call failed as expected: %s", errorMsg)
-					return
-				}
-				t.Fatalf("Unexpected error from get_sandbox: %s", errorMsg)
+				t.Fatalf("Failed to get sandbox: %s", errorMsg)
 			}
 
 			t.Logf("Successfully retrieved sandbox: %s", testSandboxName)
@@ -117,10 +84,9 @@ func TestSandboxesTools(t *testing.T) {
 				t.Fatalf("Failed to call run_sandbox: %v", err)
 			}
 
-			// Check if the tool returned an error
 			isError, errorMsg := e2e.CheckToolError(result)
 			if isError {
-				t.Fatalf("Unexpected error from run_sandbox: %s", errorMsg)
+				t.Fatalf("Failed to run sandbox: %s", errorMsg)
 			}
 
 			t.Logf("Successfully executed code in sandbox: %s", testSandboxName)
@@ -136,17 +102,9 @@ func TestSandboxesTools(t *testing.T) {
 				t.Fatalf("Failed to call delete_sandbox: %v", err)
 			}
 
-			// Check if the tool returned an error
 			isError, errorMsg := e2e.CheckToolError(result)
 			if isError {
-				// Check if it's an expected error
-				if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "404") ||
-					strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
-					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {
-					t.Logf("API call failed as expected: %s", errorMsg)
-					return
-				}
-				t.Fatalf("Unexpected error from delete_sandbox: %s", errorMsg)
+				t.Fatalf("Failed to delete sandbox: %s", errorMsg)
 			}
 
 			t.Logf("Successfully deleted sandbox: %s", testSandboxName)
@@ -162,22 +120,14 @@ func TestSandboxesTools(t *testing.T) {
 				t.Fatalf("Failed to call get_sandbox: %v", err)
 			}
 
-			// Check if the tool returned an error
 			isError, errorMsg := e2e.CheckToolError(result)
 			if isError {
-				// Accept any error as valid for deleted sandbox
-				if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "404") ||
-					strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
-					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {
-					t.Logf("Successfully verified sandbox is deleted (got expected error): %s", errorMsg)
-					return
-				}
-				t.Logf("Got error when getting deleted sandbox: %s", errorMsg)
+				// Got an error, which means the sandbox is no longer accessible
+				t.Logf("Successfully verified sandbox is deleted (got error): %s", errorMsg)
 			} else {
-				t.Logf("Sandbox still exists after deletion (this might be expected depending on API behavior)")
+				// Sandbox may still be visible briefly due to eventual consistency (e.g., DELETING status)
+				t.Logf("Sandbox still visible after deletion (eventual consistency): %s", testSandboxName)
 			}
-
-			t.Logf("Verification complete for sandbox: %s", testSandboxName)
 		})
 	})
 
