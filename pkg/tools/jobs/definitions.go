@@ -29,6 +29,10 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler) {
 	// List jobs tool
 	listJobsTool := mcp.NewTool("list_jobs",
 		mcp.WithDescription("List all jobs in the workspace"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("status",
 			mcp.Description("Optional filter by job status"),
 		),
@@ -48,6 +52,10 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler) {
 	// Get job tool
 	getJobTool := mcp.NewTool("get_job",
 		mcp.WithDescription("Get details of a specific job"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("id",
 			mcp.Required(),
 			mcp.Description("ID of the job to retrieve"),
@@ -73,6 +81,7 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler) {
 		// Delete job tool
 		deleteJobTool := mcp.NewTool("delete_job",
 			mcp.WithDescription("Delete a job from the workspace"),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("id",
 				mcp.Required(),
 				mcp.Description("ID of the job to delete"),

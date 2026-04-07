@@ -31,6 +31,10 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 	// List sandboxes tool
 	listSandboxesTool := mcp.NewTool("list_sandboxes",
 		mcp.WithDescription("List all sandboxes in the workspace"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("filter",
 			mcp.Description("Optional filter string"),
 		),
@@ -50,6 +54,10 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 	// Get sandbox tool
 	getSandboxTool := mcp.NewTool("get_sandbox",
 		mcp.WithDescription("Get details of a specific sandbox"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("name",
 			mcp.Required(),
 			mcp.Description("Name of the sandbox to retrieve"),
@@ -75,6 +83,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 		// Create sandbox tool
 		createSandboxTool := mcp.NewTool("create_sandbox",
 			mcp.WithDescription("Create a new sandbox"),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name for the sandbox"),
@@ -119,6 +128,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 		// Delete sandbox tool
 		deleteSandboxTool := mcp.NewTool("delete_sandbox",
 			mcp.WithDescription("Delete a sandbox by name"),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name of the sandbox to delete"),

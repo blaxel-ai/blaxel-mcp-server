@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
@@ -89,8 +90,13 @@ func main() {
 			logger.Fatalf("Server error: %v", err)
 		}
 	} else {
-		// Future: could support HTTP or other transports here
-		logger.Fatalf("Transport '%s' not yet implemented", *transportFlag)
+		// Use Streamable HTTP transport with stateless mode
+		// Stateless mode is appropriate because each HTTP request creates a new server instance
+		httpServer := server.NewStreamableHTTPServer(mcp, server.WithStateLess(true))
+		logger.Printf("Listening on :8080")
+		if err := http.ListenAndServe(":8080", httpServer); err != nil {
+			logger.Fatalf("HTTP server error: %v", err)
+		}
 	}
 }
 

@@ -31,6 +31,10 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 	// List service accounts tool
 	listServiceAccountsTool := mcp.NewTool("list_service_accounts",
 		mcp.WithDescription("List all service accounts in the workspace"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("filter",
 			mcp.Description("Optional filter to match service account names"),
 		),
@@ -50,6 +54,10 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 	// Get service account tool
 	getServiceAccountTool := mcp.NewTool("get_service_account",
 		mcp.WithDescription("Get details of a service account by client ID"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("name",
 			mcp.Required(),
 			mcp.Description("Client ID of the service account to retrieve"),
@@ -75,6 +83,7 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 		// Create service account tool
 		createServiceAccountTool := mcp.NewTool("create_service_account",
 			mcp.WithDescription("Create a new service account"),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Display name for the service account"),
@@ -98,6 +107,7 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 		// Delete service account tool
 		deleteServiceAccountTool := mcp.NewTool("delete_service_account",
 			mcp.WithDescription("Delete a service account by client ID"),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Client ID of the service account to delete"),
@@ -121,6 +131,7 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 		// Update service account tool
 		updateServiceAccountTool := mcp.NewTool("update_service_account",
 			mcp.WithDescription("Update a service account's name"),
+			mcp.WithIdempotentHintAnnotation(true),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Client ID of the service account to update"),

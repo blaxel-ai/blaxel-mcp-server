@@ -31,6 +31,10 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 	// List workspace users tool
 	listUsersTool := mcp.NewTool("list_workspace_users",
 		mcp.WithDescription("List all users in the workspace"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("filter",
 			mcp.Description("Optional filter to match user names or emails"),
 		),
@@ -50,6 +54,10 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 	// Get user tool
 	getUserTool := mcp.NewTool("get_workspace_user",
 		mcp.WithDescription("Get details of a specific user in the workspace"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("name",
 			mcp.Required(),
 			mcp.Description("Email of the user to retrieve"),
@@ -75,6 +83,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 		// Invite user tool
 		inviteUserTool := mcp.NewTool("invite_workspace_user",
 			mcp.WithDescription("Invite a user to the workspace"),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithString("email",
 				mcp.Required(),
 				mcp.Description("Email of the user to invite"),
@@ -103,6 +112,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 		// Update user role tool
 		updateUserRoleTool := mcp.NewTool("update_workspace_user_role",
 			mcp.WithDescription("Update a user's role in the workspace"),
+			mcp.WithIdempotentHintAnnotation(true),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Email of the user to update"),
@@ -135,6 +145,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 		// Remove user tool
 		removeUserTool := mcp.NewTool("remove_workspace_user",
 			mcp.WithDescription("Remove a user from the workspace"),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Email of the user to remove"),
