@@ -148,7 +148,23 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 
 	// Execute code in Sandbox
 	runSandboxTool := mcp.NewTool("run_sandbox",
-		mcp.WithDescription("Execute code in a sandbox environment"),
+		mcp.WithDescription(`Execute commands and manage processes in a Blaxel sandbox environment.
+
+Endpoints:
+- POST /process - Execute a command. Body fields: "command" (required), "name", "workingDir", "env" (object), "waitForCompletion" (bool), "timeout" (seconds), "waitForPorts" (int array), "restartOnFailure" (bool), "maxRestarts" (int), "keepAlive" (bool).
+- GET /process - List all processes.
+- GET /process/{identifier} - Get process info by PID or name.
+- GET /process/{identifier}/logs - Get process stdout/stderr logs.
+- DELETE /process/{identifier} - Gracefully stop a process.
+- DELETE /process/{identifier}/kill - Force kill a process.
+
+Response includes: pid, name, command, status (running/completed/failed/killed/stopped), exitCode, stdout, stderr, logs.
+
+Examples:
+- Run a command: method="POST", path="/process", body="{\"command\": \"ls -la\", \"waitForCompletion\": true}"
+- Start a server: method="POST", path="/process", body="{\"command\": \"npm start\", \"name\": \"web\", \"waitForPorts\": [3000]}"
+- Get logs: method="GET", path="/process/web/logs", body="{}"
+- Stop process: method="DELETE", path="/process/web", body="{}"`),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(false),
@@ -158,15 +174,15 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 			mcp.Description("Name of the sandbox to use"),
 		),
 		mcp.WithString("body",
-			mcp.Description("Body to use for the request (JSON string)"),
+			mcp.Description("JSON string body for the request. For process execution, must include at least a \"command\" field. See tool description for full schema and examples."),
 			mcp.DefaultString("{}"),
 		),
 		mcp.WithString("method",
-			mcp.Description("HTTP method to use"),
+			mcp.Description("HTTP method: GET to list/read processes and logs, POST to execute commands, DELETE to stop/kill processes"),
 			mcp.DefaultString("POST"),
 		),
 		mcp.WithString("path",
-			mcp.Description("Path to use"),
+			mcp.Description("API path. Common paths: /process (execute or list), /process/{identifier} (get or stop), /process/{identifier}/logs (get logs), /process/{identifier}/kill (force kill)"),
 			mcp.DefaultString("/process"),
 		),
 	)
