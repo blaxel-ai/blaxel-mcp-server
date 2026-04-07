@@ -83,7 +83,10 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler) {
 		// Create MCP server tool
 		createMCPServerTool := mcp.NewTool("create_mcp_server",
 			mcp.WithDescription("Create an MCP server (function) with flexible integration options"),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name for the MCP server"),
@@ -155,7 +158,10 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler) {
 		// Delete MCP server tool
 		deleteMCPServerTool := mcp.NewTool("delete_mcp_server",
 			mcp.WithDescription("Delete an MCP server (function) by name"),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name of the MCP server to delete"),

@@ -79,7 +79,10 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler) {
 	if !isReadOnly {
 		deleteAgentTool := mcp.NewTool("delete_agent",
 			mcp.WithDescription("Delete an agent from the workspace"),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name of the agent to delete"),

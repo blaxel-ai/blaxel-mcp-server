@@ -82,7 +82,10 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler) {
 		// Create model API tool
 		createModelAPITool := mcp.NewTool("create_model_api",
 			mcp.WithDescription("Create a model API with flexible integration options"),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name for the model API"),
@@ -141,7 +144,10 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler) {
 		// Delete model API tool
 		deleteModelAPITool := mcp.NewTool("delete_model_api",
 			mcp.WithDescription("Delete a model API by name"),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name of the model API to delete"),

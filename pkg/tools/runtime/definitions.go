@@ -27,6 +27,9 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 	// Run/Chat with Agent
 	runAgentTool := mcp.NewTool("run_agent",
 		mcp.WithDescription("Chat with or invoke an agent"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("name",
 			mcp.Required(),
@@ -65,6 +68,9 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 	// Trigger/Run Job
 	runJobTool := mcp.NewTool("run_job",
 		mcp.WithDescription("Trigger or run a job"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("name",
 			mcp.Required(),
@@ -94,6 +100,9 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 	// Invoke/Run Model
 	runModelTool := mcp.NewTool("run_model",
 		mcp.WithDescription("Invoke a model API"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("name",
 			mcp.Required(),
@@ -140,6 +149,9 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 	// Execute code in Sandbox
 	runSandboxTool := mcp.NewTool("run_sandbox",
 		mcp.WithDescription("Execute code in a sandbox environment"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("name",
 			mcp.Required(),

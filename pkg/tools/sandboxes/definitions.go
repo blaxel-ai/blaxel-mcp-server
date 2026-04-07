@@ -83,7 +83,10 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 		// Create sandbox tool
 		createSandboxTool := mcp.NewTool("create_sandbox",
 			mcp.WithDescription("Create a new sandbox"),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name for the sandbox"),
@@ -128,7 +131,10 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 		// Delete sandbox tool
 		deleteSandboxTool := mcp.NewTool("delete_sandbox",
 			mcp.WithDescription("Delete a sandbox by name"),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Name of the sandbox to delete"),

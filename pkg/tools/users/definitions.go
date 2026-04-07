@@ -83,7 +83,10 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 		// Invite user tool
 		inviteUserTool := mcp.NewTool("invite_workspace_user",
 			mcp.WithDescription("Invite a user to the workspace"),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("email",
 				mcp.Required(),
 				mcp.Description("Email of the user to invite"),
@@ -112,7 +115,10 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 		// Update user role tool
 		updateUserRoleTool := mcp.NewTool("update_workspace_user_role",
 			mcp.WithDescription("Update a user's role in the workspace"),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Email of the user to update"),
@@ -145,7 +151,10 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 		// Remove user tool
 		removeUserTool := mcp.NewTool("remove_workspace_user",
 			mcp.WithDescription("Remove a user from the workspace"),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Email of the user to remove"),

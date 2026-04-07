@@ -81,7 +81,10 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler) {
 		// Delete job tool
 		deleteJobTool := mcp.NewTool("delete_job",
 			mcp.WithDescription("Delete a job from the workspace"),
+			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("id",
 				mcp.Required(),
 				mcp.Description("ID of the job to delete"),
