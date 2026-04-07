@@ -89,7 +89,7 @@ func main() {
 		if err := server.ServeStdio(mcp); err != nil {
 			logger.Fatalf("Server error: %v", err)
 		}
-	} else {
+	} else if *transportFlag == "http" {
 		// Use Streamable HTTP transport with stateless mode
 		// Stateless mode is appropriate because each HTTP request creates a new server instance
 		httpServer := server.NewStreamableHTTPServer(mcp, server.WithStateLess(true))
@@ -97,6 +97,8 @@ func main() {
 		if err := http.ListenAndServe(":8080", httpServer); err != nil {
 			logger.Fatalf("HTTP server error: %v", err)
 		}
+	} else {
+		logger.Fatalf("Unknown transport '%s'. Supported transports: stdio, http", *transportFlag)
 	}
 }
 
