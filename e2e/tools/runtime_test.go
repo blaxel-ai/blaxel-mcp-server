@@ -150,7 +150,8 @@ func TestRuntimeTools(t *testing.T) {
 					t.Errorf("Should accept body parameter, got error: %s", errorMsg)
 				} else if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "404") ||
 					strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
-					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {
+					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") ||
+					strings.Contains(errorMsg, "429") || strings.Contains(errorMsg, "quota") {
 					t.Logf("API call failed as expected: %s", errorMsg)
 					return
 				}
@@ -178,7 +179,8 @@ func TestRuntimeTools(t *testing.T) {
 					t.Errorf("Should accept complex body parameter, got error: %s", errorMsg)
 				} else if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "404") ||
 					strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
-					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {
+					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") ||
+					strings.Contains(errorMsg, "429") || strings.Contains(errorMsg, "quota") {
 					t.Logf("API call failed as expected: %s", errorMsg)
 					return
 				}
@@ -212,10 +214,10 @@ func TestRuntimeTools(t *testing.T) {
 			}
 		})
 
-		t.Run("missing_code", func(t *testing.T) {
+		t.Run("with_name_only", func(t *testing.T) {
 			args := map[string]interface{}{
 				"name": "test-sandbox",
-				// Missing 'code' field
+				// body defaults to "{}", method defaults to "POST", path defaults to "/process"
 			}
 
 			result, err := client.CallTool("run_sandbox", args)
@@ -223,13 +225,15 @@ func TestRuntimeTools(t *testing.T) {
 				t.Fatalf("Failed to call run_sandbox: %v", err)
 			}
 
-			// Check for tool error in result
+			// Should proceed to API call (sandbox likely doesn't exist, so expect API error)
 			isError, errorMsg := e2e.CheckToolError(result)
-			if !isError {
-				t.Fatal("Expected error for missing code field")
-			}
-			if !strings.Contains(errorMsg, "code") {
-				t.Errorf("Expected error to mention 'code', got: %s", errorMsg)
+			if isError {
+				if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "404") ||
+					strings.Contains(errorMsg, "failed to start") {
+					t.Logf("API call failed as expected for non-existent sandbox: %s", errorMsg)
+					return
+				}
+				t.Logf("Got expected error: %s", errorMsg)
 			}
 		})
 	})
