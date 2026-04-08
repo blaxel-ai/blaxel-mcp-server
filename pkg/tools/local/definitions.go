@@ -2,7 +2,9 @@ package local
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -26,7 +28,7 @@ type LocalHandlerWithReadOnly interface {
 }
 
 // RegisterLocalTools registers local tools with the given handler
-func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
+func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.Config) {
 	// Check if handler supports readonly mode
 	readOnlyHandler, hasReadOnly := handler.(LocalHandlerWithReadOnly)
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
@@ -38,12 +40,19 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 			mcp.Description("Type of resource to get quick start guide for (agent, job, mcp-server, sandbox, all)"),
 			mcp.Enum("agent", "job", "mcp-server", "sandbox", "all"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(quickStartTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		resourceType := request.GetString("resourceType", "all")
 
-		result, err := handler.QuickStartGuide(resourceType)
+		result, err := activeHandler.QuickStartGuide(resourceType)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -58,15 +67,22 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 			mcp.Description("Type of resource to list templates for"),
 			mcp.Enum("agent", "job", "sandbox", "mcp-server", "all"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(listTemplatesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		resourceType := request.GetString("resourceType", "")
 		if resourceType == "" {
 			return mcp.NewToolResultError("resourceType is required"), nil
 		}
 
-		result, err := handler.ListTemplates(ctx, resourceType)
+		result, err := activeHandler.ListTemplates(ctx, resourceType)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -85,9 +101,16 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 			mcp.WithString("template",
 				mcp.Description("Template to use"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(createAgentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			directory := request.GetString("directory", "")
 			if directory == "" {
 				return mcp.NewToolResultError("directory is required"), nil
@@ -95,7 +118,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 
 			template := request.GetString("template", "")
 
-			result, err := handler.CreateAgent(directory, template)
+			result, err := activeHandler.CreateAgent(directory, template)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -112,9 +135,16 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 			mcp.WithString("template",
 				mcp.Description("Template to use"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(createJobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			directory := request.GetString("directory", "")
 			if directory == "" {
 				return mcp.NewToolResultError("directory is required"), nil
@@ -122,7 +152,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 
 			template := request.GetString("template", "")
 
-			result, err := handler.CreateJob(directory, template)
+			result, err := activeHandler.CreateJob(directory, template)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -139,9 +169,16 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 			mcp.WithString("template",
 				mcp.Description("Template to use"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(createMCPServerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			directory := request.GetString("directory", "")
 			if directory == "" {
 				return mcp.NewToolResultError("directory is required"), nil
@@ -149,7 +186,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 
 			template := request.GetString("template", "")
 
-			result, err := handler.CreateMCPServer(directory, template)
+			result, err := activeHandler.CreateMCPServer(directory, template)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -166,9 +203,16 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 			mcp.WithString("template",
 				mcp.Description("Template to use"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(createSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			directory := request.GetString("directory", "")
 			if directory == "" {
 				return mcp.NewToolResultError("directory is required"), nil
@@ -176,7 +220,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 
 			template := request.GetString("template", "")
 
-			result, err := handler.CreateSandbox(directory, template)
+			result, err := activeHandler.CreateSandbox(directory, template)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -189,12 +233,19 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 			mcp.WithString("directory",
 				mcp.Description("Path to directory to deploy"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(deployTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			directory := request.GetString("directory", "")
 
-			result, err := handler.DeployDirectory(directory)
+			result, err := activeHandler.DeployDirectory(directory)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -213,9 +264,16 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 				mcp.Required(),
 				mcp.Description("Name of the resource to run"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(runTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			resourceType := request.GetString("resourceType", "")
 			resourceName := request.GetString("resourceName", "")
 
@@ -223,7 +281,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler) {
 				return mcp.NewToolResultError("resourceType and resourceName are required"), nil
 			}
 
-			result, err := handler.RunDeployedResource(resourceType, resourceName)
+			result, err := activeHandler.RunDeployedResource(resourceType, resourceName)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

@@ -35,6 +35,15 @@ func NewSDKHandler(cfg *config.Config) (MCPServerHandler, error) {
 	}, nil
 }
 
+// resolveHandler returns a handler for the given workspace override.
+func resolveHandler(defaultHandler MCPServerHandler, cfg *config.Config, workspace string) (MCPServerHandler, error) {
+	overriddenCfg := cfg.WithWorkspace(workspace)
+	if overriddenCfg == cfg {
+		return defaultHandler, nil
+	}
+	return NewSDKHandler(overriddenCfg)
+}
+
 // ListMCPServers implements MCPServerHandler.ListMCPServers
 func (h *SDKHandler) ListMCPServers(ctx context.Context, filter string) ([]byte, error) {
 	if h.sdkClient == nil {

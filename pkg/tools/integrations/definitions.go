@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -23,7 +24,7 @@ type IntegrationHandlerWithReadOnly interface {
 }
 
 // RegisterIntegrationTools registers integration tools with the given handler
-func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler) {
+func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, cfg *config.Config) {
 	// Check if handler supports readonly mode
 	readOnlyHandler, hasReadOnly := handler.(IntegrationHandlerWithReadOnly)
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
@@ -38,12 +39,19 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler) {
 		mcp.WithString("filter",
 			mcp.Description("Optional filter string"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(listIntegrationsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		filter := request.GetString("filter", "")
 
-		result, err := handler.ListIntegrations(ctx, filter)
+		result, err := activeHandler.ListIntegrations(ctx, filter)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -62,15 +70,22 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler) {
 			mcp.Required(),
 			mcp.Description("Name of the integration"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(getIntegrationTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		name := request.GetString("name", "")
 		if name == "" {
 			return mcp.NewToolResultError("integration name is required"), nil
 		}
 
-		result, err := handler.GetIntegration(ctx, name)
+		result, err := activeHandler.GetIntegration(ctx, name)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -101,9 +116,16 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler) {
 			mcp.WithObject("config",
 				mcp.Description("Configuration parameters for the integration"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(createIntegrationTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			// Use the original approach of binding to a struct for complex parameters
 			type CreateIntegrationArgs struct {
 				Name            string                 `json:"name"`
@@ -144,7 +166,7 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler) {
 				}
 			}
 
-			result, err := handler.CreateIntegration(ctx, args.Name, args.IntegrationType, secret, config)
+			result, err := activeHandler.CreateIntegration(ctx, args.Name, args.IntegrationType, secret, config)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -163,15 +185,22 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler) {
 				mcp.Required(),
 				mcp.Description("Name of the integration to delete"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(deleteIntegrationTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			name := request.GetString("name", "")
 			if name == "" {
 				return mcp.NewToolResultError("integration name is required"), nil
 			}
 
-			result, err := handler.DeleteIntegration(ctx, name)
+			result, err := activeHandler.DeleteIntegration(ctx, name)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

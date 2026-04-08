@@ -18,5 +18,5 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	}
 
 	// Register tools using shared definitions
-	RegisterUserTools(s, handler)
+	RegisterUserTools(s, handler, cfg)
 }

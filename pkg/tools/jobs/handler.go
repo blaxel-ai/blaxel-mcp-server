@@ -33,6 +33,15 @@ func NewSDKHandler(cfg *config.Config) (JobHandler, error) {
 	}, nil
 }
 
+// resolveHandler returns a handler for the given workspace override.
+func resolveHandler(defaultHandler JobHandler, cfg *config.Config, workspace string) (JobHandler, error) {
+	overriddenCfg := cfg.WithWorkspace(workspace)
+	if overriddenCfg == cfg {
+		return defaultHandler, nil
+	}
+	return NewSDKHandler(overriddenCfg)
+}
+
 // ListJobs implements JobHandler.ListJobs
 func (h *SDKHandler) ListJobs(ctx context.Context, status string) ([]byte, error) {
 	if h.sdkClient == nil {

@@ -2,7 +2,9 @@ package users
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -23,7 +25,7 @@ type UserHandlerWithReadOnly interface {
 }
 
 // RegisterUserTools registers user tools with the given handler
-func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
+func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Config) {
 	// Check if handler supports readonly mode
 	readOnlyHandler, hasReadOnly := handler.(UserHandlerWithReadOnly)
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
@@ -38,12 +40,19 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 		mcp.WithString("filter",
 			mcp.Description("Optional filter to match user names or emails"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(listUsersTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		filter := request.GetString("filter", "")
 
-		result, err := handler.ListUsers(ctx, filter)
+		result, err := activeHandler.ListUsers(ctx, filter)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -62,15 +71,22 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 			mcp.Required(),
 			mcp.Description("Email of the user to retrieve"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(getUserTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		email := request.GetString("name", "")
 		if email == "" {
 			return mcp.NewToolResultError("name is required"), nil
 		}
 
-		result, err := handler.GetUser(ctx, email)
+		result, err := activeHandler.GetUser(ctx, email)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -94,9 +110,16 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 			mcp.WithString("role",
 				mcp.Description("Role to assign to the user (optional)"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(inviteUserTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			email := request.GetString("email", "")
 			if email == "" {
 				return mcp.NewToolResultError("email is required"), nil
@@ -104,7 +127,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 
 			role := request.GetString("role", "")
 
-			result, err := handler.InviteUser(ctx, email, role)
+			result, err := activeHandler.InviteUser(ctx, email, role)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -127,9 +150,16 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 				mcp.Required(),
 				mcp.Description("New role for the user"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(updateUserRoleTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			email := request.GetString("name", "")
 			if email == "" {
 				return mcp.NewToolResultError("name is required"), nil
@@ -140,7 +170,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 				return mcp.NewToolResultError("role is required"), nil
 			}
 
-			result, err := handler.UpdateUserRole(ctx, email, role)
+			result, err := activeHandler.UpdateUserRole(ctx, email, role)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -159,15 +189,22 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler) {
 				mcp.Required(),
 				mcp.Description("Email of the user to remove"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(removeUserTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			email := request.GetString("name", "")
 			if email == "" {
 				return mcp.NewToolResultError("name is required"), nil
 			}
 
-			result, err := handler.RemoveUser(ctx, email)
+			result, err := activeHandler.RemoveUser(ctx, email)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

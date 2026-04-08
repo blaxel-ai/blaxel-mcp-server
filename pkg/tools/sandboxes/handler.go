@@ -35,6 +35,15 @@ func NewSDKHandler(cfg *config.Config) (SandboxHandler, error) {
 	}, nil
 }
 
+// resolveHandler returns a handler for the given workspace override.
+func resolveHandler(defaultHandler SandboxHandler, cfg *config.Config, workspace string) (SandboxHandler, error) {
+	overriddenCfg := cfg.WithWorkspace(workspace)
+	if overriddenCfg == cfg {
+		return defaultHandler, nil
+	}
+	return NewSDKHandler(overriddenCfg)
+}
+
 // ListSandboxes implements SandboxHandler.ListSandboxes
 func (h *SDKHandler) ListSandboxes(ctx context.Context, filter string) ([]byte, error) {
 	if h.sdkClient == nil {

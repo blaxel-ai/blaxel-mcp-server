@@ -2,7 +2,9 @@ package agents
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -21,7 +23,7 @@ type AgentHandlerWithReadOnly interface {
 }
 
 // RegisterAgentTools registers agent tools with the given handler
-func RegisterAgentTools(s *server.MCPServer, handler AgentHandler) {
+func RegisterAgentTools(s *server.MCPServer, handler AgentHandler, cfg *config.Config) {
 	// Check if handler supports readonly mode
 	readOnlyHandler, hasReadOnly := handler.(AgentHandlerWithReadOnly)
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
@@ -35,12 +37,19 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler) {
 		mcp.WithString("filter",
 			mcp.Description("Optional filter string to match agent names"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(listAgentsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		filter := request.GetString("filter", "")
 
-		result, err := handler.ListAgents(ctx, filter)
+		result, err := activeHandler.ListAgents(ctx, filter)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -59,15 +68,22 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler) {
 			mcp.Required(),
 			mcp.Description("Name of the agent to retrieve"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(getAgentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		name := request.GetString("name", "")
 		if name == "" {
 			return mcp.NewToolResultError("agent name is required"), nil
 		}
 
-		result, err := handler.GetAgent(ctx, name)
+		result, err := activeHandler.GetAgent(ctx, name)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -87,15 +103,22 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler) {
 				mcp.Required(),
 				mcp.Description("Name of the agent to delete"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(deleteAgentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			name := request.GetString("name", "")
 			if name == "" {
 				return mcp.NewToolResultError("agent name is required"), nil
 			}
 
-			result, err := handler.DeleteAgent(ctx, name)
+			result, err := activeHandler.DeleteAgent(ctx, name)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

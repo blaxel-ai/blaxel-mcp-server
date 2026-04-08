@@ -33,6 +33,15 @@ func NewSDKHandler(cfg *config.Config) (LocalHandler, error) {
 	}, nil
 }
 
+// resolveHandler returns a handler for the given workspace override.
+func resolveHandler(defaultHandler LocalHandler, cfg *config.Config, workspace string) (LocalHandler, error) {
+	overriddenCfg := cfg.WithWorkspace(workspace)
+	if overriddenCfg == cfg {
+		return defaultHandler, nil
+	}
+	return NewSDKHandler(overriddenCfg)
+}
+
 // QuickStartGuide implements LocalHandler.QuickStartGuide
 func (h *SDKHandler) QuickStartGuide(resourceType string) (string, error) {
 	if resourceType == "" {

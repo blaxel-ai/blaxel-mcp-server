@@ -35,6 +35,15 @@ func NewSDKHandler(cfg *config.Config) (ModelAPIHandler, error) {
 	}, nil
 }
 
+// resolveHandler returns a handler for the given workspace override.
+func resolveHandler(defaultHandler ModelAPIHandler, cfg *config.Config, workspace string) (ModelAPIHandler, error) {
+	overriddenCfg := cfg.WithWorkspace(workspace)
+	if overriddenCfg == cfg {
+		return defaultHandler, nil
+	}
+	return NewSDKHandler(overriddenCfg)
+}
+
 // ListModelAPIs implements ModelAPIHandler.ListModelAPIs
 func (h *SDKHandler) ListModelAPIs(ctx context.Context, filter string) ([]byte, error) {
 	if h.sdkClient == nil {

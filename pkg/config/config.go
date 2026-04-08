@@ -75,6 +75,17 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
+// WithWorkspace returns a copy of the config with the workspace overridden.
+// If workspace is empty or matches the current workspace, the original config is returned.
+func (c *Config) WithWorkspace(workspace string) *Config {
+	if workspace == "" || workspace == c.Workspace {
+		return c
+	}
+	overridden := *c
+	overridden.Workspace = workspace
+	return &overridden
+}
+
 // ParseToolsets parses a comma-separated list of toolsets
 func ParseToolsets(toolsets string) map[string]bool {
 	result := make(map[string]bool)

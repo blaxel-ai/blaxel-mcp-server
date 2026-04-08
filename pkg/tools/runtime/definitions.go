@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -22,7 +24,7 @@ type RuntimeHandlerWithReadOnly interface {
 }
 
 // RegisterRuntimeTools registers runtime tools with the given handler
-func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
+func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *config.Config) {
 
 	// Run/Chat with Agent
 	runAgentTool := mcp.NewTool("run_agent",
@@ -42,9 +44,16 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 		mcp.WithString("context",
 			mcp.Description("Optional context data for the agent (JSON string)"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(runAgentTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		name := request.GetString("name", "")
 		if name == "" {
 			return mcp.NewToolResultError("agent name is required"), nil
@@ -57,7 +66,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 
 		context := request.GetString("context", "")
 
-		result, err := handler.RunAgent(ctx, name, message, context)
+		result, err := activeHandler.RunAgent(ctx, name, message, context)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -79,9 +88,16 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 		mcp.WithString("parameters",
 			mcp.Description("Optional parameters for the job (JSON string)"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(runJobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		name := request.GetString("name", "")
 		if name == "" {
 			return mcp.NewToolResultError("job name is required"), nil
@@ -89,7 +105,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 
 		parameters := request.GetString("parameters", "")
 
-		result, err := handler.RunJob(ctx, name, parameters)
+		result, err := activeHandler.RunJob(ctx, name, parameters)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -115,9 +131,16 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 		mcp.WithString("path",
 			mcp.Description("Path of the model API to invoke"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(runModelTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		name := request.GetString("name", "")
 		if name == "" {
 			return mcp.NewToolResultError("model name is required"), nil
@@ -138,7 +161,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler) {
 			method = "POST"
 		}
 
-		result, err := handler.RunModel(ctx, name, body, path, method)
+		result, err := activeHandler.RunModel(ctx, name, body, path, method)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -185,9 +208,16 @@ Examples:
 			mcp.Description("API path. Common paths: /process (execute or list), /process/{identifier} (get or stop), /process/{identifier}/logs (get logs), /process/{identifier}/kill (force kill)"),
 			mcp.DefaultString("/process"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(runSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		name := request.GetString("name", "")
 		if name == "" {
 			return mcp.NewToolResultError("sandbox name is required"), nil
@@ -197,7 +227,7 @@ Examples:
 		method := request.GetString("method", "POST")
 		path := request.GetString("path", "/process")
 
-		result, err := handler.RunSandbox(ctx, name, body, method, path)
+		result, err := activeHandler.RunSandbox(ctx, name, body, method, path)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

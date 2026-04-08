@@ -32,6 +32,15 @@ func NewSDKHandler(cfg *config.Config) (ServiceAccountHandler, error) {
 	}, nil
 }
 
+// resolveHandler returns a handler for the given workspace override.
+func resolveHandler(defaultHandler ServiceAccountHandler, cfg *config.Config, workspace string) (ServiceAccountHandler, error) {
+	overriddenCfg := cfg.WithWorkspace(workspace)
+	if overriddenCfg == cfg {
+		return defaultHandler, nil
+	}
+	return NewSDKHandler(overriddenCfg)
+}
+
 // ListServiceAccounts implements ServiceAccountHandler.ListServiceAccounts
 func (h *SDKHandler) ListServiceAccounts(ctx context.Context, filter string) ([]byte, error) {
 	if h.sdkClient == nil {

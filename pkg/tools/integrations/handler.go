@@ -33,6 +33,15 @@ func NewSDKHandler(cfg *config.Config) (IntegrationHandler, error) {
 	}, nil
 }
 
+// resolveHandler returns a handler for the given workspace override.
+func resolveHandler(defaultHandler IntegrationHandler, cfg *config.Config, workspace string) (IntegrationHandler, error) {
+	overriddenCfg := cfg.WithWorkspace(workspace)
+	if overriddenCfg == cfg {
+		return defaultHandler, nil
+	}
+	return NewSDKHandler(overriddenCfg)
+}
+
 // ListIntegrations implements IntegrationHandler.ListIntegrations
 func (h *SDKHandler) ListIntegrations(ctx context.Context, filter string) ([]byte, error) {
 	if h.sdkClient == nil {

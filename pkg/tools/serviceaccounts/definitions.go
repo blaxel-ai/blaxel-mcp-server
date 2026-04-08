@@ -2,7 +2,9 @@ package serviceaccounts
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -23,7 +25,7 @@ type ServiceAccountHandlerWithReadOnly interface {
 }
 
 // RegisterServiceAccountTools registers service account tools with the given handler
-func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHandler) {
+func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHandler, cfg *config.Config) {
 	// Check if handler supports readonly mode
 	readOnlyHandler, hasReadOnly := handler.(ServiceAccountHandlerWithReadOnly)
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
@@ -38,12 +40,19 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 		mcp.WithString("filter",
 			mcp.Description("Optional filter to match service account names"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(listServiceAccountsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		filter := request.GetString("filter", "")
 
-		result, err := handler.ListServiceAccounts(ctx, filter)
+		result, err := activeHandler.ListServiceAccounts(ctx, filter)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -62,15 +71,22 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 			mcp.Required(),
 			mcp.Description("Client ID of the service account to retrieve"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(getServiceAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		clientID := request.GetString("name", "")
 		if clientID == "" {
 			return mcp.NewToolResultError("name is required"), nil
 		}
 
-		result, err := handler.GetServiceAccount(ctx, clientID)
+		result, err := activeHandler.GetServiceAccount(ctx, clientID)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -91,15 +107,22 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 				mcp.Required(),
 				mcp.Description("Display name for the service account"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(createServiceAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			name := request.GetString("name", "")
 			if name == "" {
 				return mcp.NewToolResultError("service account name is required"), nil
 			}
 
-			result, err := handler.CreateServiceAccount(ctx, name)
+			result, err := activeHandler.CreateServiceAccount(ctx, name)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -118,15 +141,22 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 				mcp.Required(),
 				mcp.Description("Client ID of the service account to delete"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(deleteServiceAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			clientID := request.GetString("name", "")
 			if clientID == "" {
 				return mcp.NewToolResultError("name is required"), nil
 			}
 
-			result, err := handler.DeleteServiceAccount(ctx, clientID)
+			result, err := activeHandler.DeleteServiceAccount(ctx, clientID)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -148,9 +178,16 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 			mcp.WithString("description",
 				mcp.Description("New description for the service account"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(updateServiceAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			clientID := request.GetString("name", "")
 			if clientID == "" {
 				return mcp.NewToolResultError("name is required"), nil
@@ -158,7 +195,7 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 
 			description := request.GetString("description", "")
 
-			result, err := handler.UpdateServiceAccount(ctx, clientID, description)
+			result, err := activeHandler.UpdateServiceAccount(ctx, clientID, description)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

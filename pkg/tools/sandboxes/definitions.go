@@ -2,8 +2,10 @@ package sandboxes
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -23,7 +25,7 @@ type SandboxHandlerWithReadOnly interface {
 }
 
 // RegisterSandboxTools registers sandbox tools with the given handler
-func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
+func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *config.Config) {
 	// Check if handler supports readonly mode
 	readOnlyHandler, hasReadOnly := handler.(SandboxHandlerWithReadOnly)
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
@@ -38,12 +40,19 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 		mcp.WithString("filter",
 			mcp.Description("Optional filter string"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(listSandboxesTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		filter := request.GetString("filter", "")
 
-		result, err := handler.ListSandboxes(ctx, filter)
+		result, err := activeHandler.ListSandboxes(ctx, filter)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -62,15 +71,22 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 			mcp.Required(),
 			mcp.Description("Name of the sandbox to retrieve"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(getSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		name := request.GetString("name", "")
 		if name == "" {
 			return mcp.NewToolResultError("sandbox name is required"), nil
 		}
 
-		result, err := handler.GetSandbox(ctx, name)
+		result, err := activeHandler.GetSandbox(ctx, name)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -99,9 +115,16 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 			),
 			mcp.WithString("ports", mcp.Description("Ports to expose from the sandbox, separated by commas (eg. 8080,8081)")),
 			mcp.WithString("env", mcp.Description("Environment variables to set in the sandbox, separated by commas (eg. FOO=bar,BAR=baz)")),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(createSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			// Extract parameters from request
 			name := request.GetString("name", "")
 			if name == "" {
@@ -120,7 +143,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 				}
 			}
 
-			result, err := handler.CreateSandbox(ctx, name, image, memory, ports, env)
+			result, err := activeHandler.CreateSandbox(ctx, name, image, memory, ports, env)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -139,15 +162,22 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler) {
 				mcp.Required(),
 				mcp.Description("Name of the sandbox to delete"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(deleteSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			name := request.GetString("name", "")
 			if name == "" {
 				return mcp.NewToolResultError("sandbox name is required"), nil
 			}
 
-			result, err := handler.DeleteSandbox(ctx, name)
+			result, err := activeHandler.DeleteSandbox(ctx, name)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

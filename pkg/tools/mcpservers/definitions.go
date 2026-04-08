@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -23,7 +24,7 @@ type MCPServerHandlerWithReadOnly interface {
 }
 
 // RegisterMCPServerTools registers MCP server tools with the given handler
-func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler) {
+func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *config.Config) {
 	// Check if handler supports readonly mode
 	readOnlyHandler, hasReadOnly := handler.(MCPServerHandlerWithReadOnly)
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
@@ -38,12 +39,19 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler) {
 		mcp.WithString("filter",
 			mcp.Description("Optional filter string"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(listMCPServersTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		filter := request.GetString("filter", "")
 
-		result, err := handler.ListMCPServers(ctx, filter)
+		result, err := activeHandler.ListMCPServers(ctx, filter)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -62,15 +70,22 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler) {
 			mcp.Required(),
 			mcp.Description("Name of the MCP server"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(getMCPServerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		name := request.GetString("name", "")
 		if name == "" {
 			return mcp.NewToolResultError("MCP server name is required"), nil
 		}
 
-		result, err := handler.GetMCPServer(ctx, name)
+		result, err := activeHandler.GetMCPServer(ctx, name)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -106,9 +121,16 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler) {
 			mcp.WithString("waitForCompletion",
 				mcp.Description("Whether to wait for the MCP server to reach a final status (true/false, default: true)"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(createMCPServerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			// Use the original approach of binding to a struct for complex parameters
 			type CreateMCPServerArgs struct {
 				Name                      string                 `json:"name"`
@@ -147,7 +169,7 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler) {
 				}
 			}
 
-			result, err := handler.CreateMCPServer(ctx, args.Name, args.IntegrationConnectionName, args.IntegrationType, args.WaitForCompletion, secret, config)
+			result, err := activeHandler.CreateMCPServer(ctx, args.Name, args.IntegrationConnectionName, args.IntegrationType, args.WaitForCompletion, secret, config)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -169,9 +191,16 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler) {
 			mcp.WithString("waitForCompletion",
 				mcp.Description("Whether to wait for the MCP server to be fully deleted (true/false, default: true)"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(deleteMCPServerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			name := request.GetString("name", "")
 			if name == "" {
 				return mcp.NewToolResultError("MCP server name is required"), nil
@@ -179,7 +208,7 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler) {
 
 			waitForCompletion := request.GetString("waitForCompletion", "true")
 
-			result, err := handler.DeleteMCPServer(ctx, name, waitForCompletion)
+			result, err := activeHandler.DeleteMCPServer(ctx, name, waitForCompletion)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

@@ -2,7 +2,9 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -21,7 +23,7 @@ type JobHandlerWithReadOnly interface {
 }
 
 // RegisterJobTools registers job tools with the given handler
-func RegisterJobTools(s *server.MCPServer, handler JobHandler) {
+func RegisterJobTools(s *server.MCPServer, handler JobHandler, cfg *config.Config) {
 	// Check if handler supports readonly mode
 	readOnlyHandler, hasReadOnly := handler.(JobHandlerWithReadOnly)
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
@@ -36,12 +38,19 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler) {
 		mcp.WithString("status",
 			mcp.Description("Optional filter by job status"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(listJobsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		status := request.GetString("status", "")
 
-		result, err := handler.ListJobs(ctx, status)
+		result, err := activeHandler.ListJobs(ctx, status)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -60,15 +69,22 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler) {
 			mcp.Required(),
 			mcp.Description("ID of the job to retrieve"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(getJobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		id := request.GetString("id", "")
 		if id == "" {
 			return mcp.NewToolResultError("job ID is required"), nil
 		}
 
-		result, err := handler.GetJob(ctx, id)
+		result, err := activeHandler.GetJob(ctx, id)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -89,15 +105,22 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler) {
 				mcp.Required(),
 				mcp.Description("ID of the job to delete"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(deleteJobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			id := request.GetString("id", "")
 			if id == "" {
 				return mcp.NewToolResultError("job ID is required"), nil
 			}
 
-			result, err := handler.DeleteJob(ctx, id)
+			result, err := activeHandler.DeleteJob(ctx, id)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

@@ -31,6 +31,15 @@ func NewSDKHandler(cfg *config.Config) (UserHandler, error) {
 	}, nil
 }
 
+// resolveHandler returns a handler for the given workspace override.
+func resolveHandler(defaultHandler UserHandler, cfg *config.Config, workspace string) (UserHandler, error) {
+	overriddenCfg := cfg.WithWorkspace(workspace)
+	if overriddenCfg == cfg {
+		return defaultHandler, nil
+	}
+	return NewSDKHandler(overriddenCfg)
+}
+
 // ListUsers implements UserHandler.ListUsers
 func (h *SDKHandler) ListUsers(ctx context.Context, filter string) ([]byte, error) {
 	if h.sdkClient == nil {

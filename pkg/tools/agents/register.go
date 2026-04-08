@@ -21,5 +21,5 @@ func RegisterTools(s *server.MCPServer, cfg *config.Config) {
 	handler := NewSDKAgentHandler(sdkClient, cfg.ReadOnly)
 
 	// Register tools using shared definitions
-	RegisterAgentTools(s, handler)
+	RegisterAgentTools(s, handler, cfg)
 }

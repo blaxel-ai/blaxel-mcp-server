@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/formatter"
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
 	"github.com/blaxel-ai/toolkit/sdk"
@@ -24,6 +26,20 @@ func NewSDKAgentHandler(sdkClient *sdk.ClientWithResponses, readOnly bool) Agent
 		sdkClient: sdkClient,
 		readOnly:  readOnly,
 	}
+}
+
+// resolveHandler returns a handler for the given workspace override.
+// If workspace is empty or matches the default, the original handler is returned.
+func resolveHandler(defaultHandler AgentHandler, cfg *config.Config, workspace string) (AgentHandler, error) {
+	overriddenCfg := cfg.WithWorkspace(workspace)
+	if overriddenCfg == cfg {
+		return defaultHandler, nil
+	}
+	sdkClient, err := client.NewSDKClient(overriddenCfg)
+	if err != nil {
+		return nil, err
+	}
+	return NewSDKAgentHandler(sdkClient, overriddenCfg.ReadOnly), nil
 }
 
 // ListAgents implements AgentHandler.ListAgents

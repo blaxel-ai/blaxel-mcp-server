@@ -2,7 +2,9 @@ package modelapis
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -22,7 +24,7 @@ type ModelAPIHandlerWithReadOnly interface {
 }
 
 // RegisterModelAPITools registers model API tools with the given handler
-func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler) {
+func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *config.Config) {
 	// Check if handler supports readonly mode
 	readOnlyHandler, hasReadOnly := handler.(ModelAPIHandlerWithReadOnly)
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
@@ -37,12 +39,19 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler) {
 		mcp.WithString("filter",
 			mcp.Description("Optional filter string"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(listModelAPIsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		filter := request.GetString("filter", "")
 
-		result, err := handler.ListModelAPIs(ctx, filter)
+		result, err := activeHandler.ListModelAPIs(ctx, filter)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -61,15 +70,22 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler) {
 			mcp.Required(),
 			mcp.Description("Name of the model API"),
 		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	)
 
 	s.AddTool(getModelAPITool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+		}
 		name := request.GetString("name", "")
 		if name == "" {
 			return mcp.NewToolResultError("model API name is required"), nil
 		}
 
-		result, err := handler.GetModelAPI(ctx, name)
+		result, err := activeHandler.GetModelAPI(ctx, name)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -111,9 +127,16 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler) {
 			mcp.WithString("waitForCompletion",
 				mcp.Description("Whether to wait for the model API to reach a final status (true/false, default: true)"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(createModelAPITool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			name := request.GetString("name", "")
 			if name == "" {
 				return mcp.NewToolResultError("model API name is required"), nil
@@ -133,7 +156,7 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler) {
 				config = make(map[string]interface{})
 			}
 
-			result, err := handler.CreateModelAPI(ctx, name, model, endpoint, integrationConnectionName, provider, apiKey, waitForCompletion, config)
+			result, err := activeHandler.CreateModelAPI(ctx, name, model, endpoint, integrationConnectionName, provider, apiKey, waitForCompletion, config)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -155,9 +178,16 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler) {
 			mcp.WithString("waitForCompletion",
 				mcp.Description("Whether to wait for the model API to be fully deleted (true/false, default: true)"),
 			),
+			mcp.WithString("workspace",
+				mcp.Description("Optional workspace name to override the default workspace"),
+			),
 		)
 
 		s.AddTool(deleteModelAPITool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			name := request.GetString("name", "")
 			if name == "" {
 				return mcp.NewToolResultError("model API name is required"), nil
@@ -165,7 +195,7 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler) {
 
 			waitForCompletion := request.GetString("waitForCompletion", "true")
 
-			result, err := handler.DeleteModelAPI(ctx, name, waitForCompletion)
+			result, err := activeHandler.DeleteModelAPI(ctx, name, waitForCompletion)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

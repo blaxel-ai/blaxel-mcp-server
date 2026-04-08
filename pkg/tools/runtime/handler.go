@@ -34,6 +34,15 @@ func NewSDKHandler(cfg *config.Config) (RuntimeHandler, error) {
 	}, nil
 }
 
+// resolveHandler returns a handler for the given workspace override.
+func resolveHandler(defaultHandler RuntimeHandler, cfg *config.Config, workspace string) (RuntimeHandler, error) {
+	overriddenCfg := cfg.WithWorkspace(workspace)
+	if overriddenCfg == cfg {
+		return defaultHandler, nil
+	}
+	return NewSDKHandler(overriddenCfg)
+}
+
 // RunAgent implements RuntimeHandler.RunAgent
 func (h *SDKHandler) RunAgent(ctx context.Context, name, message, agentContext string) (string, error) {
 	if h.blaxelClient == nil {
