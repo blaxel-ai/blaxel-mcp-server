@@ -91,7 +91,7 @@ func (h *SDKAgentHandler) GetAgent(ctx context.Context, name string) ([]byte, er
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	resp, err := h.sdkClient.GetAgentWithResponse(ctx, name)
+	resp, err := h.sdkClient.GetAgentWithResponse(ctx, name, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get agent: %w", err)
 	}

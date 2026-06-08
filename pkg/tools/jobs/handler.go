@@ -90,7 +90,7 @@ func (h *SDKHandler) GetJob(ctx context.Context, id string) ([]byte, error) {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	resp, err := h.sdkClient.GetJobWithResponse(ctx, id)
+	resp, err := h.sdkClient.GetJobWithResponse(ctx, id, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get job: %w", err)
 	}
