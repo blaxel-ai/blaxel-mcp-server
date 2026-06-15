@@ -84,7 +84,7 @@ func (h *SDKHandler) GetMCPServer(ctx context.Context, name string) ([]byte, err
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	server, err := h.sdkClient.GetFunctionWithResponse(ctx, name)
+	server, err := h.sdkClient.GetFunctionWithResponse(ctx, name, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get MCP server: %w", err)
 	}
@@ -358,7 +358,7 @@ func NewMCPServerStatusChecker(sdkClient *sdk.ClientWithResponses) *MCPServerSta
 
 // GetResource gets the MCP server resource
 func (m *MCPServerStatusChecker) GetResource(ctx context.Context, name string) (interface{}, error) {
-	return m.sdkClient.GetFunctionWithResponse(ctx, name)
+	return m.sdkClient.GetFunctionWithResponse(ctx, name, nil)
 }
 
 // ExtractStatus extracts status from MCP server response
