@@ -71,22 +71,21 @@ func TestSandboxesTools(t *testing.T) {
 			t.Logf("Successfully retrieved sandbox: %s", testSandboxName)
 		})
 
-		t.Run("run_sandbox", func(t *testing.T) {
+		t.Run("run_sandbox_command", func(t *testing.T) {
 			args := map[string]interface{}{
-				"name":   testSandboxName,
-				"body":   `{"command":"echo \"Hello from sandbox!\"", "waitForCompletion": true}`,
-				"method": "POST",
-				"path":   "/process",
+				"name":              testSandboxName,
+				"command":           `echo "Hello from sandbox!"`,
+				"waitForCompletion": true,
 			}
 
-			result, err := client.CallTool("run_sandbox", args)
+			result, err := client.CallTool("run_sandbox_command", args)
 			if err != nil {
-				t.Fatalf("Failed to call run_sandbox: %v", err)
+				t.Fatalf("Failed to call run_sandbox_command: %v", err)
 			}
 
 			isError, errorMsg := e2e.CheckToolError(result)
 			if isError {
-				t.Fatalf("Failed to run sandbox: %s", errorMsg)
+				t.Fatalf("Failed to run sandbox command: %s", errorMsg)
 			}
 
 			t.Logf("Successfully executed code in sandbox: %s", testSandboxName)

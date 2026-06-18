@@ -19,7 +19,13 @@ func TestModelAPIsTools(t *testing.T) {
 	testModelAPIName := e2e.GenerateRandomTestName("test-model")
 
 	t.Run("full_lifecycle_test", func(t *testing.T) {
+		modelAPICreated := false
+
 		t.Run("create_blaxel_model_api", func(t *testing.T) {
+			if openaiAPIKey == "" {
+				t.Skip("OPENAI_API_KEY is required for the OpenAI model API lifecycle test")
+			}
+
 			// Create a model API with OpenAI integration
 			args := map[string]interface{}{
 				"name":     testModelAPIName,
@@ -38,16 +44,16 @@ func TestModelAPIsTools(t *testing.T) {
 			if isError {
 				// Check if it's an expected error (like already exists or auth issues)
 				if strings.Contains(errorMsg, "already exists") {
+					modelAPICreated = true
 					t.Logf("Model API already exists, continuing with test: %s", errorMsg)
 					return
-				} else if strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
-					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {
-					t.Logf("API call failed as expected with test credentials: %s", errorMsg)
-					return
+				} else if e2e.IsExpectedRemoteTestError(errorMsg) {
+					t.Skipf("API call failed as expected with test credentials: %s", errorMsg)
 				}
 				t.Fatalf("Unexpected error from create_model_api: %s", errorMsg)
 			}
 
+			modelAPICreated = true
 			t.Logf("Successfully created model API: %s", testModelAPIName)
 		})
 
@@ -78,6 +84,10 @@ func TestModelAPIsTools(t *testing.T) {
 		})
 
 		t.Run("get_model_api", func(t *testing.T) {
+			if !modelAPICreated {
+				t.Skip("create_model_api did not create a test model API")
+			}
+
 			args := map[string]interface{}{
 				"name": testModelAPIName,
 			}
@@ -104,6 +114,10 @@ func TestModelAPIsTools(t *testing.T) {
 		})
 
 		t.Run("run_model", func(t *testing.T) {
+			if !modelAPICreated {
+				t.Skip("create_model_api did not create a test model API")
+			}
+
 			args := map[string]interface{}{
 				"name": testModelAPIName,
 				"path": "/v1/chat/completions",
@@ -114,12 +128,23 @@ func TestModelAPIsTools(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to call run_model: %v", err)
 			}
-			t.Logf("Result: %v", result)
+
+			isError, errorMsg := e2e.CheckToolError(result)
+			if isError {
+				if e2e.IsExpectedRemoteTestError(errorMsg) {
+					t.Skipf("API call failed as expected with test credentials: %s", errorMsg)
+				}
+				t.Fatalf("Unexpected error from run_model: %s", errorMsg)
+			}
 
 			t.Logf("Successfully ran model API: %s", testModelAPIName)
 		})
 
 		t.Run("delete_model_api", func(t *testing.T) {
+			if !modelAPICreated {
+				t.Skip("create_model_api did not create a test model API")
+			}
+
 			args := map[string]interface{}{
 				"name": testModelAPIName,
 			}
@@ -146,6 +171,10 @@ func TestModelAPIsTools(t *testing.T) {
 		})
 
 		t.Run("verify_model_api_deleted", func(t *testing.T) {
+			if !modelAPICreated {
+				t.Skip("create_model_api did not create a test model API")
+			}
+
 			args := map[string]interface{}{
 				"name": testModelAPIName,
 			}

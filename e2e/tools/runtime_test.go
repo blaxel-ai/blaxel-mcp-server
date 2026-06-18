@@ -189,22 +189,20 @@ func TestRuntimeTools(t *testing.T) {
 		})
 	})
 
-	t.Run("run_sandbox", func(t *testing.T) {
-		t.Run("missing_required_fields", func(t *testing.T) {
+	t.Run("run_sandbox_command", func(t *testing.T) {
+		t.Run("missing_name", func(t *testing.T) {
 			args := map[string]interface{}{
-				// Missing 'name' field
+				"command": "echo hello",
 			}
 
-			result, err := client.CallTool("run_sandbox", args)
+			result, err := client.CallTool("run_sandbox_command", args)
 			if err != nil {
-				// Check if it's an error that mentions "name"
 				if strings.Contains(err.Error(), "name") {
-					return // Expected error
+					return
 				}
 				t.Fatalf("Unexpected error: %v", err)
 			}
 
-			// Check for tool error in result
 			isError, errorMsg := e2e.CheckToolError(result)
 			if !isError {
 				t.Fatal("Expected error for missing name field")
@@ -214,27 +212,66 @@ func TestRuntimeTools(t *testing.T) {
 			}
 		})
 
-		t.Run("with_name_only", func(t *testing.T) {
+		t.Run("missing_command", func(t *testing.T) {
 			args := map[string]interface{}{
 				"name": "test-sandbox",
-				// body defaults to "{}", method defaults to "POST", path defaults to "/process"
 			}
 
-			result, err := client.CallTool("run_sandbox", args)
+			result, err := client.CallTool("run_sandbox_command", args)
 			if err != nil {
-				t.Fatalf("Failed to call run_sandbox: %v", err)
+				t.Fatalf("Failed to call run_sandbox_command: %v", err)
 			}
 
-			// Should proceed to API call (sandbox likely doesn't exist, so expect API error)
+			isError, errorMsg := e2e.CheckToolError(result)
+			if !isError {
+				t.Fatal("Expected error for missing command field")
+			}
+			if !strings.Contains(errorMsg, "command") {
+				t.Errorf("Expected error to mention 'command', got: %s", errorMsg)
+			}
+		})
+
+		t.Run("with_command", func(t *testing.T) {
+			args := map[string]interface{}{
+				"name":    "test-sandbox",
+				"command": "echo hello",
+			}
+
+			result, err := client.CallTool("run_sandbox_command", args)
+			if err != nil {
+				t.Fatalf("Failed to call run_sandbox_command: %v", err)
+			}
+
 			isError, errorMsg := e2e.CheckToolError(result)
 			if isError {
 				if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "404") ||
-					strings.Contains(errorMsg, "failed to start") {
-					t.Logf("API call failed as expected for non-existent sandbox: %s", errorMsg)
+					strings.Contains(errorMsg, "failed to start") || strings.Contains(errorMsg, "401") ||
+					strings.Contains(errorMsg, "unauthorized") || strings.Contains(errorMsg, "forbidden") {
+					t.Logf("API call failed as expected for non-existent or inaccessible sandbox: %s", errorMsg)
 					return
 				}
-				t.Logf("Got expected error: %s", errorMsg)
+				t.Fatalf("Unexpected error from run_sandbox_command: %s", errorMsg)
 			}
 		})
 	})
+
+	for _, toolName := range []string{"list_sandbox_processes", "get_sandbox_process", "get_sandbox_process_logs", "stop_sandbox_process", "kill_sandbox_process"} {
+		t.Run(toolName+"_missing_name", func(t *testing.T) {
+			result, err := client.CallTool(toolName, map[string]interface{}{})
+			if err != nil {
+				if strings.Contains(err.Error(), "name") {
+					return
+				}
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			isError, errorMsg := e2e.CheckToolError(result)
+			if !isError {
+				t.Fatalf("Expected error for missing name field from %s", toolName)
+			}
+			if !strings.Contains(errorMsg, "name") {
+				t.Errorf("Expected error to mention 'name', got: %s", errorMsg)
+			}
+		})
+	}
 }

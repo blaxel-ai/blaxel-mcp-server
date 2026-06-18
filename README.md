@@ -138,6 +138,9 @@ export BL_READ_ONLY="true"              # Run in read-only mode
 
 # Enable all toolsets (default)
 ./blaxel-mcp-server --toolsets all
+
+# Run Streamable HTTP transport on a custom address
+./blaxel-mcp-server --transport http --http-addr :8081
 ```
 
 ## Available Tools
@@ -168,6 +171,7 @@ export BL_READ_ONLY="true"              # Run in read-only mode
 ### Sandbox Management
 - `list_sandboxes` - List all sandboxes
 - `get_sandbox` - Get details of a specific sandbox
+- `create_sandbox` - Create a sandbox
 - `delete_sandbox` - Delete a sandbox
 
 ### Job Management
@@ -177,18 +181,16 @@ export BL_READ_ONLY="true"              # Run in read-only mode
 
 ### Integration Management
 - `list_integrations` - List all integration connections
-- `get_integration` - Get details of a specific integration
-- `create_mcp_integration` - Create an MCP integration
-- `create_model_api_integration` - Create a model API integration
-- `delete_integration` - Delete an integration
-- `list_mcp_integrations` - List available MCP Hub integrations
-- `get_mcp_integration` - Get MCP Hub integration details
-- `list_integration_models` - List models for an integration
+- `get_integration` - Get details of a specific integration connection
+- `create_integration` - Create a new integration connection
+- `delete_integration` - Delete an integration connection
 
 ### User Management
-- `list_users` - List all users in the workspace
-- `invite_user` - Invite a user to the workspace
-- `delete_user` - Remove a user from the workspace
+- `list_workspace_users` - List all users in the workspace
+- `get_workspace_user` - Get details for a user by email
+- `invite_workspace_user` - Invite a user to the workspace
+- `update_workspace_user_role` - Update a user's workspace role
+- `remove_workspace_user` - Remove a user from the workspace
 
 ### Service Account Management
 - `list_service_accounts` - List all service accounts
@@ -200,8 +202,13 @@ export BL_READ_ONLY="true"              # Run in read-only mode
 ### Runtime Execution Tools
 - `run_agent` - Chat with or invoke an agent
 - `run_job` - Trigger or run a job
-- `run_model` - Invoke a model API
-- `run_sandbox` - Execute code in a sandbox environment
+- `run_model` - Invoke a Blaxel Model API
+- `run_sandbox_command` - Execute a command in a sandbox process
+- `list_sandbox_processes` - List sandbox processes
+- `get_sandbox_process` - Get a sandbox process
+- `get_sandbox_process_logs` - Get sandbox process logs
+- `stop_sandbox_process` - Gracefully stop a sandbox process
+- `kill_sandbox_process` - Force-kill a sandbox process
 
 ### Local Development Tools
 - `local_create_agent` - Create a new agent project locally

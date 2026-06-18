@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -17,12 +18,15 @@ func TestMCPServersTools(t *testing.T) {
 
 	t.Run("full_lifecycle_test", func(t *testing.T) {
 		t.Run("create_blaxel_search_mcp", func(t *testing.T) {
-			// Create an MCP server with blaxel-search integration type
+			// Create an MCP server with blaxel-search integration type.
+			// Do not wait for deployment in the default suite: this keeps local
+			// readiness runs from depending on slow live resource convergence.
 			args := map[string]interface{}{
-				"name":            testMCPServerName,
-				"integrationType": "blaxel-search",
-				"secret":          map[string]interface{}{}, // Empty secret as mentioned
-				"config":          map[string]interface{}{}, // Empty config as mentioned
+				"name":              testMCPServerName,
+				"integrationType":   "blaxel-search",
+				"secret":            map[string]interface{}{}, // Empty secret as mentioned
+				"config":            map[string]interface{}{}, // Empty config as mentioned
+				"waitForCompletion": "false",
 			}
 
 			result, err := client.CallTool("create_mcp_server", args)
@@ -102,7 +106,8 @@ func TestMCPServersTools(t *testing.T) {
 
 		t.Run("delete_mcp_server", func(t *testing.T) {
 			args := map[string]interface{}{
-				"name": testMCPServerName,
+				"name":              testMCPServerName,
+				"waitForCompletion": "false",
 			}
 
 			result, err := client.CallTool("delete_mcp_server", args)
@@ -156,6 +161,10 @@ func TestMCPServersTools(t *testing.T) {
 	})
 
 	t.Run("wait_for_completion_tests", func(t *testing.T) {
+		if os.Getenv("BLAXEL_E2E_WAIT_FOR_COMPLETION") != "true" {
+			t.Skip("set BLAXEL_E2E_WAIT_FOR_COMPLETION=true to run live wait-for-completion MCP server lifecycle checks")
+		}
+
 		testMCPServerNoWait := e2e.GenerateRandomTestName("test-mcp-no-wait")
 		testMCPServerWait := e2e.GenerateRandomTestName("test-mcp-wait")
 
@@ -385,7 +394,8 @@ func TestMCPServersTools(t *testing.T) {
 	t.Cleanup(func() {
 		// Try to delete the test MCP server if it still exists
 		cleanupArgs := map[string]interface{}{
-			"name": testMCPServerName,
+			"name":              testMCPServerName,
+			"waitForCompletion": "false",
 		}
 		_, _ = client.CallTool("delete_mcp_server", cleanupArgs)
 

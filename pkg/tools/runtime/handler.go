@@ -172,8 +172,10 @@ func (h *SDKHandler) RunSandbox(ctx context.Context, name, bodyStr, method, path
 	}
 
 	var bodyData interface{}
-	if err := json.Unmarshal([]byte(bodyStr), &bodyData); err != nil {
-		bodyData = json.RawMessage(bodyStr)
+	if method != http.MethodGet {
+		if err := json.Unmarshal([]byte(bodyStr), &bodyData); err != nil {
+			bodyData = json.RawMessage(bodyStr)
+		}
 	}
 
 	// Use RunWithMetadata which fetches sandbox.metadata.url and uses it as the base URL.

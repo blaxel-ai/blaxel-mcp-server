@@ -35,7 +35,10 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 	// Quick start guide tool
 	quickStartTool := mcp.NewTool("local_quick_start_guide",
+		mcp.WithTitleAnnotation("Local Quick Start Guide"),
 		mcp.WithDescription("Get a quick start guide for creating Blaxel resources without credentials"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("resourceType",
 			mcp.Description("Type of resource to get quick start guide for (agent, job, mcp-server, sandbox, all)"),
 			mcp.Enum("agent", "job", "mcp-server", "sandbox", "all"),
@@ -61,7 +64,10 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 	// List templates tool
 	listTemplatesTool := mcp.NewTool("local_list_templates",
+		mcp.WithTitleAnnotation("Local List Templates"),
 		mcp.WithDescription("List available templates for a specific resource type"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithString("resourceType",
 			mcp.Required(),
 			mcp.Description("Type of resource to list templates for"),
@@ -93,7 +99,10 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 	if !isReadOnly {
 		// Create agent locally
 		createAgentTool := mcp.NewTool("local_create_agent",
+			mcp.WithTitleAnnotation("Local Create Agent"),
 			mcp.WithDescription("Create a new Blaxel agent app project locally using CLI"),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("directory",
 				mcp.Required(),
 				mcp.Description("Path to create agent in"),
@@ -127,7 +136,10 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 		// Create job locally
 		createJobTool := mcp.NewTool("local_create_job",
+			mcp.WithTitleAnnotation("Local Create Job"),
 			mcp.WithDescription("Create a new Blaxel job project locally using CLI"),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("directory",
 				mcp.Required(),
 				mcp.Description("Path to create job in"),
@@ -161,7 +173,10 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 		// Create MCP server locally
 		createMCPServerTool := mcp.NewTool("local_create_mcp_server",
+			mcp.WithTitleAnnotation("Local Create MCP Server"),
 			mcp.WithDescription("Create a new Blaxel MCP server project locally using CLI"),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("directory",
 				mcp.Required(),
 				mcp.Description("Path to create MCP server in"),
@@ -195,7 +210,10 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 		// Create sandbox locally
 		createSandboxTool := mcp.NewTool("local_create_sandbox",
+			mcp.WithTitleAnnotation("Local Create Sandbox"),
 			mcp.WithDescription("Create a new Blaxel sandbox project locally using CLI"),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("directory",
 				mcp.Required(),
 				mcp.Description("Path to create sandbox in"),
@@ -229,7 +247,10 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 		// Deploy directory
 		deployTool := mcp.NewTool("local_deploy_directory",
+			mcp.WithTitleAnnotation("Local Deploy Directory"),
 			mcp.WithDescription("Deploy a local directory containing agent, MCP server, or job code to Blaxel"),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("directory",
 				mcp.Description("Path to directory to deploy"),
 			),
@@ -254,7 +275,10 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 		// Run deployed resource
 		runTool := mcp.NewTool("local_run_deployed_resource",
+			mcp.WithTitleAnnotation("Local Run Deployed Resource"),
 			mcp.WithDescription("Run a deployed resource on Blaxel"),
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithString("resourceType",
 				mcp.Required(),
 				mcp.Description("Type of resource to run"),

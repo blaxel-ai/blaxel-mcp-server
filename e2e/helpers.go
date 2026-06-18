@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,26 +28,15 @@ type MCPTestClient struct {
 // NewMCPTestClient creates a new test client using the official mcp-go library
 func NewMCPTestClient(t *testing.T, env map[string]string) *MCPTestClient {
 	t.Helper()
+	return NewMCPTestClientWithArgs(t, env)
+}
 
-	// Find the server binary - handle different test locations
-	var serverPath string
-	// Try different possible paths based on where the test is running from
-	possiblePaths := []string{
-		filepath.Join("..", "build", "blaxel-mcp-server"),       // from e2e/tools/
-		filepath.Join("..", "..", "build", "blaxel-mcp-server"), // from e2e/
-		filepath.Join("build", "blaxel-mcp-server"),             // from project root
-	}
+// NewMCPTestClientWithArgs creates a new test client and passes command-line
+// arguments to the server binary.
+func NewMCPTestClientWithArgs(t *testing.T, env map[string]string, args ...string) *MCPTestClient {
+	t.Helper()
 
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			serverPath = path
-			break
-		}
-	}
-
-	if serverPath == "" {
-		t.Fatalf("Server binary not found. Tried paths: %v. Run 'make build' first.", possiblePaths)
-	}
+	serverPath := ServerBinaryPath(t)
 
 	// Prepare environment variables
 	envVars := os.Environ()
@@ -55,7 +45,7 @@ func NewMCPTestClient(t *testing.T, env map[string]string) *MCPTestClient {
 	}
 
 	// Create the MCP client using stdio transport
-	stdioClient, err := client.NewStdioMCPClient(serverPath, envVars)
+	stdioClient, err := client.NewStdioMCPClient(serverPath, envVars, args...)
 	if err != nil {
 		t.Fatalf("Failed to create MCP client: %v", err)
 	}
@@ -83,6 +73,100 @@ func NewMCPTestClient(t *testing.T, env map[string]string) *MCPTestClient {
 		client: stdioClient,
 		ctx:    ctx,
 		cancel: cancel,
+	}
+}
+
+// ServerBinaryPath returns the built server binary path for the current test package.
+func ServerBinaryPath(t *testing.T) string {
+	t.Helper()
+
+	// Find the server binary - handle different test locations
+	var serverPath string
+	// Try different possible paths based on where the test is running from
+	possiblePaths := []string{
+		filepath.Join("..", "build", "blaxel-mcp-server"),       // from e2e/tools/
+		filepath.Join("..", "..", "build", "blaxel-mcp-server"), // from e2e/
+		filepath.Join("build", "blaxel-mcp-server"),             // from project root
+	}
+
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			serverPath = path
+			break
+		}
+	}
+
+	if serverPath == "" {
+		t.Fatalf("Server binary not found. Tried paths: %v. Run 'make build' first.", possiblePaths)
+	}
+
+	assertServerBinaryFresh(t, serverPath)
+
+	return serverPath
+}
+
+func assertServerBinaryFresh(t *testing.T, serverPath string) {
+	t.Helper()
+
+	binaryInfo, err := os.Stat(serverPath)
+	if err != nil {
+		t.Fatalf("failed to stat server binary %s: %v", serverPath, err)
+	}
+
+	repoRoot, err := findRepoRoot(filepath.Dir(serverPath))
+	if err != nil {
+		t.Fatalf("failed to find repo root for server binary %s: %v", serverPath, err)
+	}
+
+	newestSourcePath := ""
+	newestSourceTime := time.Time{}
+	for _, path := range []string{"go.mod", "go.sum", "cmd", "pkg"} {
+		fullPath := filepath.Join(repoRoot, path)
+		if _, err := os.Stat(fullPath); err != nil {
+			continue
+		}
+		if err := filepath.Walk(fullPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil || info.IsDir() {
+				return err
+			}
+			if filepath.Ext(path) != ".go" && filepath.Base(path) != "go.mod" && filepath.Base(path) != "go.sum" {
+				return nil
+			}
+			if info.ModTime().After(newestSourceTime) {
+				newestSourceTime = info.ModTime()
+				newestSourcePath = path
+			}
+			return nil
+		}); err != nil {
+			t.Fatalf("failed to inspect source freshness under %s: %v", fullPath, err)
+		}
+	}
+
+	if newestSourceTime.After(binaryInfo.ModTime()) {
+		t.Fatalf("server binary %s is stale: newest source %s was modified at %s, after binary at %s; run make build before e2e tests",
+			serverPath,
+			newestSourcePath,
+			newestSourceTime.Format(time.RFC3339Nano),
+			binaryInfo.ModTime().Format(time.RFC3339Nano),
+		)
+	}
+}
+
+func findRepoRoot(start string) (string, error) {
+	abs, err := filepath.Abs(start)
+	if err != nil {
+		return "", err
+	}
+
+	for {
+		if _, err := os.Stat(filepath.Join(abs, "go.mod")); err == nil {
+			return abs, nil
+		}
+		parent := filepath.Dir(abs)
+		if parent == abs {
+			return "", fmt.Errorf("go.mod not found from %s", start)
+		}
+		abs = parent
 	}
 }
 
@@ -157,6 +241,35 @@ func CheckToolError(result *mcp.CallToolResult) (bool, string) {
 	}
 
 	return false, ""
+}
+
+// IsExpectedRemoteTestError returns true for remote/API failures that mean the
+// test environment cannot exercise a live external lifecycle, but the tool call
+// reached validation or the remote API instead of failing locally.
+func IsExpectedRemoteTestError(errorMsg string) bool {
+	msg := strings.ToLower(errorMsg)
+	for _, expected := range []string{
+		"401",
+		"403",
+		"404",
+		"unauthorized",
+		"forbidden",
+		"invalid api key",
+		"invalid token",
+		"invalid credentials",
+		"not found",
+		"no integration found",
+		"no model api found",
+		"api key is required",
+		"quota",
+		"rate limit",
+		"429",
+	} {
+		if strings.Contains(msg, expected) {
+			return true
+		}
+	}
+	return false
 }
 
 // ExtractJSONResult extracts JSON result from tool response
