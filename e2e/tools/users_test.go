@@ -31,11 +31,6 @@ func TestUsersTools(t *testing.T) {
 				t.Fatalf("Unexpected error from list_workspace_users: %s", errorMsg)
 			}
 
-			// If successful, validate the response structure
-			// t.Logf("call succeeded")
-			if err != nil {
-			}
-
 		})
 	})
 

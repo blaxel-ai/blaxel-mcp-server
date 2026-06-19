@@ -134,7 +134,7 @@ func TestRuntimeTools(t *testing.T) {
 			args := map[string]interface{}{
 				"name": "sandbox-openai",
 				"path": "/v1/chat/completions",
-				"body": `{"messages":[{"role":"user","content":"What is the capital of France?"}]}`,
+				"body": `{"model":"chat-latest","messages":[{"role":"user","content":"Reply with exactly: ok"}],"max_completion_tokens":20}`,
 			}
 
 			result, err := client.CallTool("run_model", args)
@@ -163,7 +163,7 @@ func TestRuntimeTools(t *testing.T) {
 			args := map[string]interface{}{
 				"name": "sandbox-openai",
 				"path": "/v1/chat/completions",
-				"body": `{"messages":[{"role":"user","content":"Hello, how are you?"}],"temperature":0.7,"max_tokens":100}`,
+				"body": `{"model":"chat-latest","messages":[{"role":"user","content":"Reply with exactly: ok"}],"max_completion_tokens":20}`,
 			}
 
 			result, err := client.CallTool("run_model", args)

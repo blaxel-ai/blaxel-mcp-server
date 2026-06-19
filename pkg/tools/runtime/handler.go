@@ -72,7 +72,9 @@ func (h *SDKHandler) RunAgent(ctx context.Context, name, message, agentContext s
 	if err != nil {
 		return "", fmt.Errorf("failed to run agent: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -113,7 +115,9 @@ func (h *SDKHandler) RunJob(ctx context.Context, name, parameters string) (strin
 	if err != nil {
 		return "", fmt.Errorf("failed to run job: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -150,7 +154,9 @@ func (h *SDKHandler) RunModel(ctx context.Context, name, bodyStr, path, method s
 	if err != nil {
 		return "", fmt.Errorf("failed to run model: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -192,7 +198,9 @@ func (h *SDKHandler) RunSandbox(ctx context.Context, name, bodyStr, method, path
 	if err != nil {
 		return "", fmt.Errorf("failed to execute in sandbox: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -65,7 +65,7 @@ func NewMCPTestClientWithArgs(t *testing.T, env map[string]string, args ...strin
 	})
 	if err != nil {
 		cancel()
-		stdioClient.Close()
+		_ = stdioClient.Close()
 		t.Fatalf("Failed to initialize MCP client: %v", err)
 	}
 
@@ -186,7 +186,7 @@ func (c *MCPTestClient) Close() {
 		c.cancel()
 	}
 	if c.client != nil {
-		c.client.Close()
+		_ = c.client.Close()
 	}
 }
 

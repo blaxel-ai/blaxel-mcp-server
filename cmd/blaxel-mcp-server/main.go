@@ -50,7 +50,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-	defer logger.Close()
+	defer func() {
+		_ = logger.Close()
+	}()
 
 	// Load .env file if it exists (like the CLI does)
 	if err := godotenv.Load(); err != nil {

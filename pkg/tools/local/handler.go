@@ -174,7 +174,7 @@ func (h *SDKHandler) ListTemplates(ctx context.Context, resourceType string) (st
 	if resourceType == "all" {
 		result.WriteString("All available templates:\n\n")
 	} else {
-		result.WriteString(fmt.Sprintf("Available templates for %s:\n\n", resourceType))
+		fmt.Fprintf(&result, "Available templates for %s:\n\n", resourceType)
 	}
 
 	keywords := topicKeywords[resourceType]
@@ -208,9 +208,9 @@ func (h *SDKHandler) ListTemplates(ctx context.Context, resourceType string) (st
 		}
 
 		count++
-		result.WriteString(fmt.Sprintf("• %s", *template.Name))
+		fmt.Fprintf(&result, "• %s", *template.Name)
 		if template.Description != nil {
-			result.WriteString(fmt.Sprintf(" - %s", *template.Description))
+			fmt.Fprintf(&result, " - %s", *template.Description)
 		}
 		if template.StarCount != nil || template.DownloadCount != nil {
 			stars := 0
@@ -221,10 +221,10 @@ func (h *SDKHandler) ListTemplates(ctx context.Context, resourceType string) (st
 			if template.DownloadCount != nil {
 				downloads = *template.DownloadCount
 			}
-			result.WriteString(fmt.Sprintf(" (⭐ %d, 📥 %d)", stars, downloads))
+			fmt.Fprintf(&result, " (⭐ %d, 📥 %d)", stars, downloads)
 		}
 		if template.Topics != nil && len(*template.Topics) > 0 {
-			result.WriteString(fmt.Sprintf("\n  Topics: %s", strings.Join(*template.Topics, ", ")))
+			fmt.Fprintf(&result, "\n  Topics: %s", strings.Join(*template.Topics, ", "))
 		}
 		result.WriteString("\n\n")
 	}
@@ -233,11 +233,11 @@ func (h *SDKHandler) ListTemplates(ctx context.Context, resourceType string) (st
 		if resourceType == "all" {
 			result.WriteString("No templates found.")
 		} else {
-			result.WriteString(fmt.Sprintf("No templates found for %s.", resourceType))
+			fmt.Fprintf(&result, "No templates found for %s.", resourceType)
 		}
 	} else {
 		if resourceType != "all" {
-			result.WriteString(fmt.Sprintf("\nUse any of these templates when creating a new %s by specifying the template name.", resourceType))
+			fmt.Fprintf(&result, "\nUse any of these templates when creating a new %s by specifying the template name.", resourceType)
 		}
 	}
 

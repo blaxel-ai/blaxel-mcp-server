@@ -158,7 +158,9 @@ func TestHTTPTransportHostedAnthropicToolsetReviewReadiness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create streamable HTTP client: %v", err)
 	}
-	defer client.Close()
+	defer func() {
+		_ = client.Close()
+	}()
 
 	if err := client.Start(ctx); err != nil {
 		t.Fatalf("failed to start streamable HTTP client: %v", err)

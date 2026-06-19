@@ -58,7 +58,7 @@ func (h *SDKHandler) ListServiceAccounts(ctx context.Context, filter string) ([]
 
 	// Convert service accounts for formatting
 	var formattedResult strings.Builder
-	formattedResult.WriteString(fmt.Sprintf("Found %d service account(s):\n\n", len(*serviceAccounts.JSON200)))
+	fmt.Fprintf(&formattedResult, "Found %d service account(s):\n\n", len(*serviceAccounts.JSON200))
 
 	count := 0
 	for _, account := range *serviceAccounts.JSON200 {
@@ -70,22 +70,22 @@ func (h *SDKHandler) ListServiceAccounts(ctx context.Context, filter string) ([]
 		}
 		count++
 
-		formattedResult.WriteString(fmt.Sprintf("Service Account #%d:\n", count))
+		fmt.Fprintf(&formattedResult, "Service Account #%d:\n", count)
 
 		if account.Name != nil {
-			formattedResult.WriteString(fmt.Sprintf("  Name: %s\n", *account.Name))
+			fmt.Fprintf(&formattedResult, "  Name: %s\n", *account.Name)
 		}
 
 		if account.ClientId != nil {
-			formattedResult.WriteString(fmt.Sprintf("  Client ID: %s\n", *account.ClientId))
+			fmt.Fprintf(&formattedResult, "  Client ID: %s\n", *account.ClientId)
 		}
 
 		if account.Description != nil && *account.Description != "" {
-			formattedResult.WriteString(fmt.Sprintf("  Description: %s\n", *account.Description))
+			fmt.Fprintf(&formattedResult, "  Description: %s\n", *account.Description)
 		}
 
 		if account.CreatedAt != nil {
-			formattedResult.WriteString(fmt.Sprintf("  Created: %s\n", *account.CreatedAt))
+			fmt.Fprintf(&formattedResult, "  Created: %s\n", *account.CreatedAt)
 		}
 
 		formattedResult.WriteString("\n")
@@ -93,7 +93,7 @@ func (h *SDKHandler) ListServiceAccounts(ctx context.Context, filter string) ([]
 
 	if count == 0 && filter != "" {
 		formattedResult.Reset()
-		formattedResult.WriteString(fmt.Sprintf("No service accounts found matching filter: %s", filter))
+		fmt.Fprintf(&formattedResult, "No service accounts found matching filter: %s", filter)
 	}
 
 	return []byte(formattedResult.String()), nil
