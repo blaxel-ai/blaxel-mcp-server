@@ -31,6 +31,7 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 
 	// List MCP servers tool
 	listMCPServersTool := mcp.NewTool("list_mcp_servers",
+		mcp.WithTitleAnnotation("List MCP Servers"),
 		mcp.WithDescription("List all MCP servers (functions) in the workspace"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
@@ -61,6 +62,7 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 
 	// Get MCP server tool
 	getMCPServerTool := mcp.NewTool("get_mcp_server",
+		mcp.WithTitleAnnotation("Get MCP Server"),
 		mcp.WithDescription("Get details of a specific MCP server (function)"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
@@ -97,9 +99,10 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 	if !isReadOnly {
 		// Create MCP server tool
 		createMCPServerTool := mcp.NewTool("create_mcp_server",
+			mcp.WithTitleAnnotation("Create MCP Server"),
 			mcp.WithDescription("Create an MCP server (function) with flexible integration options"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
@@ -179,6 +182,7 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 
 		// Delete MCP server tool
 		deleteMCPServerTool := mcp.NewTool("delete_mcp_server",
+			mcp.WithTitleAnnotation("Delete MCP Server"),
 			mcp.WithDescription("Delete an MCP server (function) by name"),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),

@@ -34,11 +34,6 @@ func TestServiceAccountsTools(t *testing.T) {
 				t.Fatalf("Unexpected error from list_service_accounts: %s", errorMsg)
 			}
 
-			// If successful, validate the response structure
-			// t.Logf("call succeeded")
-			if err != nil {
-			}
-
 		})
 	})
 

@@ -32,6 +32,7 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 
 	// List service accounts tool
 	listServiceAccountsTool := mcp.NewTool("list_service_accounts",
+		mcp.WithTitleAnnotation("List Service Accounts"),
 		mcp.WithDescription("List all service accounts in the workspace"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
@@ -62,6 +63,7 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 
 	// Get service account tool
 	getServiceAccountTool := mcp.NewTool("get_service_account",
+		mcp.WithTitleAnnotation("Get Service Account"),
 		mcp.WithDescription("Get details of a service account by client ID"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
@@ -98,9 +100,10 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 	if !isReadOnly {
 		// Create service account tool
 		createServiceAccountTool := mcp.NewTool("create_service_account",
+			mcp.WithTitleAnnotation("Create Service Account"),
 			mcp.WithDescription("Create a new service account"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
@@ -132,6 +135,7 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 
 		// Delete service account tool
 		deleteServiceAccountTool := mcp.NewTool("delete_service_account",
+			mcp.WithTitleAnnotation("Delete Service Account"),
 			mcp.WithDescription("Delete a service account by client ID"),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
@@ -166,9 +170,10 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 
 		// Update service account tool
 		updateServiceAccountTool := mcp.NewTool("update_service_account",
+			mcp.WithTitleAnnotation("Update Service Account"),
 			mcp.WithDescription("Update a service account's name"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(true),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",

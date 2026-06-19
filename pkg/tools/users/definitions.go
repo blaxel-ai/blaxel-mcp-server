@@ -32,6 +32,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 
 	// List workspace users tool
 	listUsersTool := mcp.NewTool("list_workspace_users",
+		mcp.WithTitleAnnotation("List Workspace Users"),
 		mcp.WithDescription("List all users in the workspace"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
@@ -62,12 +63,13 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 
 	// Get user tool
 	getUserTool := mcp.NewTool("get_workspace_user",
+		mcp.WithTitleAnnotation("Get Workspace User"),
 		mcp.WithDescription("Get details of a specific user in the workspace"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithOpenWorldHintAnnotation(false),
-		mcp.WithString("name",
+		mcp.WithString("email",
 			mcp.Required(),
 			mcp.Description("Email of the user to retrieve"),
 		),
@@ -81,9 +83,9 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
 		}
-		email := request.GetString("name", "")
+		email := request.GetString("email", request.GetString("name", ""))
 		if email == "" {
-			return mcp.NewToolResultError("name is required"), nil
+			return mcp.NewToolResultError("email is required"), nil
 		}
 
 		result, err := activeHandler.GetUser(ctx, email)
@@ -98,9 +100,10 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 	if !isReadOnly {
 		// Invite user tool
 		inviteUserTool := mcp.NewTool("invite_workspace_user",
+			mcp.WithTitleAnnotation("Invite Workspace User"),
 			mcp.WithDescription("Invite a user to the workspace"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("email",
@@ -137,12 +140,13 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 
 		// Update user role tool
 		updateUserRoleTool := mcp.NewTool("update_workspace_user_role",
+			mcp.WithTitleAnnotation("Update Workspace User Role"),
 			mcp.WithDescription("Update a user's role in the workspace"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(true),
 			mcp.WithOpenWorldHintAnnotation(false),
-			mcp.WithString("name",
+			mcp.WithString("email",
 				mcp.Required(),
 				mcp.Description("Email of the user to update"),
 			),
@@ -160,9 +164,9 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
 			}
-			email := request.GetString("name", "")
+			email := request.GetString("email", request.GetString("name", ""))
 			if email == "" {
-				return mcp.NewToolResultError("name is required"), nil
+				return mcp.NewToolResultError("email is required"), nil
 			}
 
 			role := request.GetString("role", "")
@@ -180,12 +184,13 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 
 		// Remove user tool
 		removeUserTool := mcp.NewTool("remove_workspace_user",
+			mcp.WithTitleAnnotation("Remove Workspace User"),
 			mcp.WithDescription("Remove a user from the workspace"),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
-			mcp.WithString("name",
+			mcp.WithString("email",
 				mcp.Required(),
 				mcp.Description("Email of the user to remove"),
 			),
@@ -199,9 +204,9 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
 			}
-			email := request.GetString("name", "")
+			email := request.GetString("email", request.GetString("name", ""))
 			if email == "" {
-				return mcp.NewToolResultError("name is required"), nil
+				return mcp.NewToolResultError("email is required"), nil
 			}
 
 			result, err := activeHandler.RemoveUser(ctx, email)

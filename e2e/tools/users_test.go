@@ -31,22 +31,17 @@ func TestUsersTools(t *testing.T) {
 				t.Fatalf("Unexpected error from list_workspace_users: %s", errorMsg)
 			}
 
-			// If successful, validate the response structure
-			// t.Logf("call succeeded")
-			if err != nil {
-			}
-
 		})
 	})
 
 	t.Run("get_workspace_user", func(t *testing.T) {
-		t.Run("missing_name", func(t *testing.T) {
+		t.Run("missing_email", func(t *testing.T) {
 			args := map[string]interface{}{}
 
 			result, err := client.CallTool("get_workspace_user", args)
 			if err != nil {
-				// Check if it's an error that mentions "name"
-				if strings.Contains(err.Error(), "name") {
+				// Check if it's an error that mentions "email"
+				if strings.Contains(err.Error(), "email") {
 					return // Expected error
 				}
 				t.Fatalf("Unexpected error: %v", err)
@@ -55,16 +50,16 @@ func TestUsersTools(t *testing.T) {
 			// Check for tool error in result
 			isError, errorMsg := e2e.CheckToolError(result)
 			if !isError {
-				t.Fatal("Expected error for missing name field")
+				t.Fatal("Expected error for missing email field")
 			}
-			if !strings.Contains(errorMsg, "name") {
-				t.Errorf("Expected error to mention 'name', got: %s", errorMsg)
+			if !strings.Contains(errorMsg, "email") {
+				t.Errorf("Expected error to mention 'email', got: %s", errorMsg)
 			}
 		})
 
-		t.Run("with_name", func(t *testing.T) {
+		t.Run("with_email", func(t *testing.T) {
 			args := map[string]interface{}{
-				"name": "test-user",
+				"email": "test@example.com",
 			}
 
 			result, err := client.CallTool("get_workspace_user", args)
@@ -75,9 +70,9 @@ func TestUsersTools(t *testing.T) {
 			// Check if the tool returned an error
 			isError, errorMsg := e2e.CheckToolError(result)
 			if isError {
-				// Should accept name parameter even if user not found
+				// Should accept email parameter even if user not found
 				if strings.Contains(errorMsg, "required") {
-					t.Errorf("Should accept name parameter, got error: %s", errorMsg)
+					t.Errorf("Should accept email parameter, got error: %s", errorMsg)
 				} else if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "404") ||
 					strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
 					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {
@@ -173,13 +168,13 @@ func TestUsersTools(t *testing.T) {
 	t.Run("update_workspace_user_role", func(t *testing.T) {
 		t.Run("missing_required_fields", func(t *testing.T) {
 			args := map[string]interface{}{
-				// Missing 'name' field
+				// Missing 'email' field
 			}
 
 			result, err := client.CallTool("update_workspace_user_role", args)
 			if err != nil {
-				// Check if it's an error that mentions "name"
-				if strings.Contains(err.Error(), "name") {
+				// Check if it's an error that mentions "email"
+				if strings.Contains(err.Error(), "email") {
 					return // Expected error
 				}
 				t.Fatalf("Unexpected error: %v", err)
@@ -188,16 +183,16 @@ func TestUsersTools(t *testing.T) {
 			// Check for tool error in result
 			isError, errorMsg := e2e.CheckToolError(result)
 			if !isError {
-				t.Fatal("Expected error for missing name field")
+				t.Fatal("Expected error for missing email field")
 			}
-			if !strings.Contains(errorMsg, "name") {
-				t.Errorf("Expected error to mention 'name', got: %s", errorMsg)
+			if !strings.Contains(errorMsg, "email") {
+				t.Errorf("Expected error to mention 'email', got: %s", errorMsg)
 			}
 		})
 
 		t.Run("missing_role", func(t *testing.T) {
 			args := map[string]interface{}{
-				"name": "test-user",
+				"email": "test@example.com",
 				// Missing 'role' field
 			}
 
@@ -220,10 +215,10 @@ func TestUsersTools(t *testing.T) {
 			}
 		})
 
-		t.Run("with_name_and_role", func(t *testing.T) {
+		t.Run("with_email_and_role", func(t *testing.T) {
 			args := map[string]interface{}{
-				"name": "test-user",
-				"role": "admin",
+				"email": "test@example.com",
+				"role":  "admin",
 			}
 
 			result, err := client.CallTool("update_workspace_user_role", args)
@@ -251,13 +246,13 @@ func TestUsersTools(t *testing.T) {
 	})
 
 	t.Run("remove_workspace_user", func(t *testing.T) {
-		t.Run("missing_name", func(t *testing.T) {
+		t.Run("missing_email", func(t *testing.T) {
 			args := map[string]interface{}{}
 
 			result, err := client.CallTool("remove_workspace_user", args)
 			if err != nil {
-				// Check if it's an error that mentions "name"
-				if strings.Contains(err.Error(), "name") {
+				// Check if it's an error that mentions "email"
+				if strings.Contains(err.Error(), "email") {
 					return // Expected error
 				}
 				t.Fatalf("Unexpected error: %v", err)
@@ -266,16 +261,16 @@ func TestUsersTools(t *testing.T) {
 			// Check for tool error in result
 			isError, errorMsg := e2e.CheckToolError(result)
 			if !isError {
-				t.Fatal("Expected error for missing name field")
+				t.Fatal("Expected error for missing email field")
 			}
-			if !strings.Contains(errorMsg, "name") {
-				t.Errorf("Expected error to mention 'name', got: %s", errorMsg)
+			if !strings.Contains(errorMsg, "email") {
+				t.Errorf("Expected error to mention 'email', got: %s", errorMsg)
 			}
 		})
 
-		t.Run("with_name", func(t *testing.T) {
+		t.Run("with_email", func(t *testing.T) {
 			args := map[string]interface{}{
-				"name": "test-user",
+				"email": "test@example.com",
 			}
 
 			result, err := client.CallTool("remove_workspace_user", args)
@@ -286,9 +281,9 @@ func TestUsersTools(t *testing.T) {
 			// Check if the tool returned an error
 			isError, errorMsg := e2e.CheckToolError(result)
 			if isError {
-				// Should accept name parameter even if user not found
+				// Should accept email parameter even if user not found
 				if strings.Contains(errorMsg, "required") {
-					t.Errorf("Should accept name parameter, got error: %s", errorMsg)
+					t.Errorf("Should accept email parameter, got error: %s", errorMsg)
 				} else if strings.Contains(errorMsg, "not found") || strings.Contains(errorMsg, "404") ||
 					strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
 					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {

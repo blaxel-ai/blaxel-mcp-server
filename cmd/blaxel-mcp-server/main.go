@@ -34,6 +34,7 @@ func main() {
 	readOnlyFlag := flag.Bool("read-only", false, "Enable read-only mode")
 	toolsetsFlag := flag.String("toolsets", "all", "Comma-separated list of toolsets to enable")
 	transportFlag := flag.String("transport", "stdio", "Transport mode: stdio (default) or http")
+	httpAddrFlag := flag.String("http-addr", ":8080", "Address to listen on when using http transport")
 	flag.Parse()
 
 	// Handle version flag (before logger init since it doesn't need logging)
@@ -49,7 +50,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-	defer logger.Close()
+	defer func() {
+		_ = logger.Close()
+	}()
 
 	// Load .env file if it exists (like the CLI does)
 	if err := godotenv.Load(); err != nil {
@@ -93,8 +96,8 @@ func main() {
 		// Use Streamable HTTP transport with stateless mode
 		// Stateless mode is appropriate because each HTTP request creates a new server instance
 		httpServer := server.NewStreamableHTTPServer(mcp, server.WithStateLess(true))
-		logger.Printf("Listening on :8080")
-		if err := http.ListenAndServe(":8080", httpServer); err != nil {
+		logger.Printf("Listening on %s", *httpAddrFlag)
+		if err := http.ListenAndServe(*httpAddrFlag, httpServer); err != nil {
 			logger.Fatalf("HTTP server error: %v", err)
 		}
 	} else {

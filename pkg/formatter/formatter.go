@@ -13,38 +13,38 @@ func FormatAgents(agents []AgentModel) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Found %d agent(s):\n\n", len(agents)))
+	fmt.Fprintf(&b, "Found %d agent(s):\n\n", len(agents))
 
 	for i, agent := range agents {
-		b.WriteString(fmt.Sprintf("Agent #%d:\n", i+1))
-		b.WriteString(fmt.Sprintf("  Name: %s\n", agent.Name))
+		fmt.Fprintf(&b, "Agent #%d:\n", i+1)
+		fmt.Fprintf(&b, "  Name: %s\n", agent.Name)
 
 		if len(agent.Labels) > 0 {
-			b.WriteString(fmt.Sprintf("  Labels: %v\n", formatLabels(agent.Labels)))
+			fmt.Fprintf(&b, "  Labels: %v\n", formatLabels(agent.Labels))
 		}
 
 		if agent.Status != "" {
-			b.WriteString(fmt.Sprintf("  Status: %s\n", agent.Status))
+			fmt.Fprintf(&b, "  Status: %s\n", agent.Status)
 		}
 
 		if agent.Image != nil {
-			b.WriteString(fmt.Sprintf("  Image: %s\n", *agent.Image))
+			fmt.Fprintf(&b, "  Image: %s\n", *agent.Image)
 		}
 
 		if agent.Generation != nil {
-			b.WriteString(fmt.Sprintf("  Generation: %s\n", *agent.Generation))
+			fmt.Fprintf(&b, "  Generation: %s\n", *agent.Generation)
 		}
 
 		if agent.Memory != nil {
-			b.WriteString(fmt.Sprintf("  Memory: %dMB\n", *agent.Memory))
+			fmt.Fprintf(&b, "  Memory: %dMB\n", *agent.Memory)
 		}
 
 		if agent.MaxTasks != nil {
-			b.WriteString(fmt.Sprintf("  Max Concurrent Tasks: %d\n", *agent.MaxTasks))
+			fmt.Fprintf(&b, "  Max Concurrent Tasks: %d\n", *agent.MaxTasks)
 		}
 
 		if agent.CreatedAt != nil {
-			b.WriteString(fmt.Sprintf("  Created: %s\n", agent.CreatedAt.Format(time.RFC3339)))
+			fmt.Fprintf(&b, "  Created: %s\n", agent.CreatedAt.Format(time.RFC3339))
 		}
 
 		b.WriteString("\n")
@@ -60,38 +60,38 @@ func FormatJobs(jobs []JobModel) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Found %d job(s):\n\n", len(jobs)))
+	fmt.Fprintf(&b, "Found %d job(s):\n\n", len(jobs))
 
 	for i, job := range jobs {
-		b.WriteString(fmt.Sprintf("Job #%d:\n", i+1))
-		b.WriteString(fmt.Sprintf("  Name: %s\n", job.Name))
+		fmt.Fprintf(&b, "Job #%d:\n", i+1)
+		fmt.Fprintf(&b, "  Name: %s\n", job.Name)
 
 		if len(job.Labels) > 0 {
-			b.WriteString(fmt.Sprintf("  Labels: %v\n", formatLabels(job.Labels)))
+			fmt.Fprintf(&b, "  Labels: %v\n", formatLabels(job.Labels))
 		}
 
 		if job.Status != "" {
-			b.WriteString(fmt.Sprintf("  Status: %s\n", job.Status))
+			fmt.Fprintf(&b, "  Status: %s\n", job.Status)
 		}
 
 		if job.Image != nil {
-			b.WriteString(fmt.Sprintf("  Image: %s\n", *job.Image))
+			fmt.Fprintf(&b, "  Image: %s\n", *job.Image)
 		}
 
 		if job.Memory != nil {
-			b.WriteString(fmt.Sprintf("  Memory: %dMB\n", *job.Memory))
+			fmt.Fprintf(&b, "  Memory: %dMB\n", *job.Memory)
 		}
 
 		if job.MaxTasks != nil {
-			b.WriteString(fmt.Sprintf("  Max Concurrent Tasks: %d\n", *job.MaxTasks))
+			fmt.Fprintf(&b, "  Max Concurrent Tasks: %d\n", *job.MaxTasks)
 		}
 
 		if job.MaxRetries != nil {
-			b.WriteString(fmt.Sprintf("  Max Retries: %d\n", *job.MaxRetries))
+			fmt.Fprintf(&b, "  Max Retries: %d\n", *job.MaxRetries)
 		}
 
 		if job.CreatedAt != nil {
-			b.WriteString(fmt.Sprintf("  Created: %s\n", job.CreatedAt.Format(time.RFC3339)))
+			fmt.Fprintf(&b, "  Created: %s\n", job.CreatedAt.Format(time.RFC3339))
 		}
 
 		b.WriteString("\n")
@@ -107,34 +107,34 @@ func FormatModels(models []ModelAPI) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Found %d model API(s):\n\n", len(models)))
+	fmt.Fprintf(&b, "Found %d model API(s):\n\n", len(models))
 
 	for i, model := range models {
-		b.WriteString(fmt.Sprintf("Model API #%d:\n", i+1))
-		b.WriteString(fmt.Sprintf("  Name: %s\n", model.Name))
+		fmt.Fprintf(&b, "Model API #%d:\n", i+1)
+		fmt.Fprintf(&b, "  Name: %s\n", model.Name)
 
 		if len(model.Labels) > 0 {
-			b.WriteString(fmt.Sprintf("  Labels: %v\n", formatLabels(model.Labels)))
+			fmt.Fprintf(&b, "  Labels: %v\n", formatLabels(model.Labels))
 		}
 
 		if model.Status != "" {
-			b.WriteString(fmt.Sprintf("  Status: %s\n", model.Status))
+			fmt.Fprintf(&b, "  Status: %s\n", model.Status)
 		}
 
 		if model.Type != nil {
-			b.WriteString(fmt.Sprintf("  Type: %s\n", *model.Type))
+			fmt.Fprintf(&b, "  Type: %s\n", *model.Type)
 		}
 
 		if model.ModelName != nil {
-			b.WriteString(fmt.Sprintf("  Model: %s\n", *model.ModelName))
+			fmt.Fprintf(&b, "  Model: %s\n", *model.ModelName)
 		}
 
 		if model.Memory != nil {
-			b.WriteString(fmt.Sprintf("  Memory: %dMB\n", *model.Memory))
+			fmt.Fprintf(&b, "  Memory: %dMB\n", *model.Memory)
 		}
 
 		if model.CreatedAt != nil {
-			b.WriteString(fmt.Sprintf("  Created: %s\n", model.CreatedAt.Format(time.RFC3339)))
+			fmt.Fprintf(&b, "  Created: %s\n", model.CreatedAt.Format(time.RFC3339))
 		}
 
 		b.WriteString("\n")
@@ -150,38 +150,38 @@ func FormatFunctions(functions []FunctionModel) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Found %d MCP server(s):\n\n", len(functions)))
+	fmt.Fprintf(&b, "Found %d MCP server(s):\n\n", len(functions))
 
 	for i, function := range functions {
-		b.WriteString(fmt.Sprintf("MCP Server #%d:\n", i+1))
-		b.WriteString(fmt.Sprintf("  Name: %s\n", function.Name))
+		fmt.Fprintf(&b, "MCP Server #%d:\n", i+1)
+		fmt.Fprintf(&b, "  Name: %s\n", function.Name)
 
 		if len(function.Labels) > 0 {
-			b.WriteString(fmt.Sprintf("  Labels: %v\n", formatLabels(function.Labels)))
+			fmt.Fprintf(&b, "  Labels: %v\n", formatLabels(function.Labels))
 		}
 
 		if function.Status != "" {
-			b.WriteString(fmt.Sprintf("  Status: %s\n", function.Status))
+			fmt.Fprintf(&b, "  Status: %s\n", function.Status)
 		}
 
 		if function.Image != nil {
-			b.WriteString(fmt.Sprintf("  Image: %s\n", *function.Image))
+			fmt.Fprintf(&b, "  Image: %s\n", *function.Image)
 		}
 
 		if function.Generation != nil {
-			b.WriteString(fmt.Sprintf("  Generation: %s\n", *function.Generation))
+			fmt.Fprintf(&b, "  Generation: %s\n", *function.Generation)
 		}
 
 		if function.Memory != nil {
-			b.WriteString(fmt.Sprintf("  Memory: %dMB\n", *function.Memory))
+			fmt.Fprintf(&b, "  Memory: %dMB\n", *function.Memory)
 		}
 
 		if len(function.IntegrationConnections) > 0 {
-			b.WriteString(fmt.Sprintf("  Integration Connections: %s\n", strings.Join(function.IntegrationConnections, ", ")))
+			fmt.Fprintf(&b, "  Integration Connections: %s\n", strings.Join(function.IntegrationConnections, ", "))
 		}
 
 		if function.CreatedAt != nil {
-			b.WriteString(fmt.Sprintf("  Created: %s\n", function.CreatedAt.Format(time.RFC3339)))
+			fmt.Fprintf(&b, "  Created: %s\n", function.CreatedAt.Format(time.RFC3339))
 		}
 
 		b.WriteString("\n")
@@ -197,46 +197,46 @@ func FormatSandboxes(sandboxes []SandboxModel) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Found %d sandbox(es):\n\n", len(sandboxes)))
+	fmt.Fprintf(&b, "Found %d sandbox(es):\n\n", len(sandboxes))
 
 	for i, sandbox := range sandboxes {
-		b.WriteString(fmt.Sprintf("Sandbox #%d:\n", i+1))
-		b.WriteString(fmt.Sprintf("  Name: %s\n", sandbox.Name))
+		fmt.Fprintf(&b, "Sandbox #%d:\n", i+1)
+		fmt.Fprintf(&b, "  Name: %s\n", sandbox.Name)
 
 		if len(sandbox.Labels) > 0 {
-			b.WriteString(fmt.Sprintf("  Labels: %v\n", formatLabels(sandbox.Labels)))
+			fmt.Fprintf(&b, "  Labels: %v\n", formatLabels(sandbox.Labels))
 		}
 
 		if sandbox.Status != "" {
-			b.WriteString(fmt.Sprintf("  Status: %s\n", sandbox.Status))
+			fmt.Fprintf(&b, "  Status: %s\n", sandbox.Status)
 		}
 
 		if sandbox.Image != nil {
-			b.WriteString(fmt.Sprintf("  Image: %s\n", *sandbox.Image))
+			fmt.Fprintf(&b, "  Image: %s\n", *sandbox.Image)
 		}
 
 		if sandbox.Generation != nil {
-			b.WriteString(fmt.Sprintf("  Generation: %s\n", *sandbox.Generation))
+			fmt.Fprintf(&b, "  Generation: %s\n", *sandbox.Generation)
 		}
 
 		if sandbox.Memory != nil {
-			b.WriteString(fmt.Sprintf("  Memory: %dMB\n", *sandbox.Memory))
+			fmt.Fprintf(&b, "  Memory: %dMB\n", *sandbox.Memory)
 		}
 
 		if sandbox.TTL != nil {
-			b.WriteString(fmt.Sprintf("  TTL: %s\n", *sandbox.TTL))
+			fmt.Fprintf(&b, "  TTL: %s\n", *sandbox.TTL)
 		}
 
 		if sandbox.Expires != nil {
-			b.WriteString(fmt.Sprintf("  Expires: %s\n", sandbox.Expires.Format(time.RFC3339)))
+			fmt.Fprintf(&b, "  Expires: %s\n", sandbox.Expires.Format(time.RFC3339))
 		}
 
 		if len(sandbox.Ports) > 0 {
-			b.WriteString(fmt.Sprintf("  Ports: %v\n", sandbox.Ports))
+			fmt.Fprintf(&b, "  Ports: %v\n", sandbox.Ports)
 		}
 
 		if sandbox.CreatedAt != nil {
-			b.WriteString(fmt.Sprintf("  Created: %s\n", sandbox.CreatedAt.Format(time.RFC3339)))
+			fmt.Fprintf(&b, "  Created: %s\n", sandbox.CreatedAt.Format(time.RFC3339))
 		}
 
 		b.WriteString("\n")
@@ -252,26 +252,26 @@ func FormatIntegrations(integrations []IntegrationModel) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Found %d integration(s):\n\n", len(integrations)))
+	fmt.Fprintf(&b, "Found %d integration(s):\n\n", len(integrations))
 
 	for i, integration := range integrations {
-		b.WriteString(fmt.Sprintf("Integration #%d:\n", i+1))
-		b.WriteString(fmt.Sprintf("  Name: %s\n", integration.Name))
+		fmt.Fprintf(&b, "Integration #%d:\n", i+1)
+		fmt.Fprintf(&b, "  Name: %s\n", integration.Name)
 
 		if len(integration.Labels) > 0 {
-			b.WriteString(fmt.Sprintf("  Labels: %v\n", formatLabels(integration.Labels)))
+			fmt.Fprintf(&b, "  Labels: %v\n", formatLabels(integration.Labels))
 		}
 
 		if len(integration.Secrets) > 0 {
-			b.WriteString(fmt.Sprintf("  Secrets: %v\n", formatLabels(integration.Secrets)))
+			fmt.Fprintf(&b, "  Secrets: %v\n", formatLabels(integration.Secrets))
 		}
 
 		if len(integration.Config) > 0 {
-			b.WriteString(fmt.Sprintf("  Config: %v\n", formatLabels(integration.Config)))
+			fmt.Fprintf(&b, "  Config: %v\n", formatLabels(integration.Config))
 		}
 
 		if integration.CreatedAt != nil {
-			b.WriteString(fmt.Sprintf("  Created: %s\n", integration.CreatedAt.Format(time.RFC3339)))
+			fmt.Fprintf(&b, "  Created: %s\n", integration.CreatedAt.Format(time.RFC3339))
 		}
 
 		b.WriteString("\n")
@@ -287,15 +287,15 @@ func FormatUsers(users []UserModel) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Found %d user(s):\n\n", len(users)))
+	fmt.Fprintf(&b, "Found %d user(s):\n\n", len(users))
 
 	for i, user := range users {
-		b.WriteString(fmt.Sprintf("User #%d:\n", i+1))
-		b.WriteString(fmt.Sprintf("  Email: %s\n", user.Email))
-		b.WriteString(fmt.Sprintf("  Name: %s\n", user.Name))
-		b.WriteString(fmt.Sprintf("  Role: %s\n", user.Role))
-		b.WriteString(fmt.Sprintf("  Accepted: %t\n", user.Accepted))
-		b.WriteString(fmt.Sprintf("  Email Verified: %t\n", user.EmailVerified))
+		fmt.Fprintf(&b, "User #%d:\n", i+1)
+		fmt.Fprintf(&b, "  Email: %s\n", user.Email)
+		fmt.Fprintf(&b, "  Name: %s\n", user.Name)
+		fmt.Fprintf(&b, "  Role: %s\n", user.Role)
+		fmt.Fprintf(&b, "  Accepted: %t\n", user.Accepted)
+		fmt.Fprintf(&b, "  Email Verified: %t\n", user.EmailVerified)
 		b.WriteString("\n")
 	}
 
@@ -309,16 +309,16 @@ func FormatServiceAccounts(serviceAccounts []ServiceAccountModel) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Found %d service account(s):\n\n", len(serviceAccounts)))
+	fmt.Fprintf(&b, "Found %d service account(s):\n\n", len(serviceAccounts))
 
 	for i, sa := range serviceAccounts {
-		b.WriteString(fmt.Sprintf("Service Account #%d:\n", i+1))
-		b.WriteString(fmt.Sprintf("  Name: %s\n", sa.Name))
-		b.WriteString(fmt.Sprintf("  Client ID: %s\n", sa.ClientID))
-		b.WriteString(fmt.Sprintf("  Description: %s\n", sa.Description))
+		fmt.Fprintf(&b, "Service Account #%d:\n", i+1)
+		fmt.Fprintf(&b, "  Name: %s\n", sa.Name)
+		fmt.Fprintf(&b, "  Client ID: %s\n", sa.ClientID)
+		fmt.Fprintf(&b, "  Description: %s\n", sa.Description)
 
 		if sa.CreatedAt != nil {
-			b.WriteString(fmt.Sprintf("  Created: %s\n", sa.CreatedAt.Format(time.RFC3339)))
+			fmt.Fprintf(&b, "  Created: %s\n", sa.CreatedAt.Format(time.RFC3339))
 		}
 
 		b.WriteString("\n")
@@ -334,26 +334,26 @@ func FormatTemplates(templates []TemplateModel) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Found %d template(s):\n\n", len(templates)))
+	fmt.Fprintf(&b, "Found %d template(s):\n\n", len(templates))
 
 	for i, template := range templates {
-		b.WriteString(fmt.Sprintf("Template #%d:\n", i+1))
-		b.WriteString(fmt.Sprintf("  Name: %s\n", template.Name))
+		fmt.Fprintf(&b, "Template #%d:\n", i+1)
+		fmt.Fprintf(&b, "  Name: %s\n", template.Name)
 
 		if template.Description != nil {
-			b.WriteString(fmt.Sprintf("  Description: %s\n", *template.Description))
+			fmt.Fprintf(&b, "  Description: %s\n", *template.Description)
 		}
 
 		if len(template.Topics) > 0 {
-			b.WriteString(fmt.Sprintf("  Topics: %s\n", strings.Join(template.Topics, ", ")))
+			fmt.Fprintf(&b, "  Topics: %s\n", strings.Join(template.Topics, ", "))
 		}
 
 		if template.StarCount != nil {
-			b.WriteString(fmt.Sprintf("  Stars: %d\n", *template.StarCount))
+			fmt.Fprintf(&b, "  Stars: %d\n", *template.StarCount)
 		}
 
 		if template.DownloadCount != nil {
-			b.WriteString(fmt.Sprintf("  Downloads: %d\n", *template.DownloadCount))
+			fmt.Fprintf(&b, "  Downloads: %d\n", *template.DownloadCount)
 		}
 
 		b.WriteString("\n")

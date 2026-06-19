@@ -19,7 +19,12 @@ func TestIntegrationsTools(t *testing.T) {
 	testIntegrationName := e2e.GenerateRandomTestName("test-integration")
 
 	t.Run("full_lifecycle_test", func(t *testing.T) {
+		integrationCreated := false
+
 		t.Run("create_openai_integration", func(t *testing.T) {
+			if openaiAPIKey == "" {
+				t.Skip("OPENAI_API_KEY is required for the OpenAI integration lifecycle test")
+			}
 			args := map[string]interface{}{
 				"name":            testIntegrationName,
 				"integrationType": "openai",
@@ -41,16 +46,16 @@ func TestIntegrationsTools(t *testing.T) {
 			if isError {
 				// Check if it's an expected error (like already exists or auth issues)
 				if strings.Contains(errorMsg, "already exists") {
+					integrationCreated = true
 					t.Logf("Integration already exists, continuing with test: %s", errorMsg)
 					return
-				} else if strings.Contains(errorMsg, "401") || strings.Contains(errorMsg, "unauthorized") ||
-					strings.Contains(errorMsg, "forbidden") || strings.Contains(errorMsg, "invalid") {
-					t.Logf("API call failed as expected with test credentials: %s", errorMsg)
-					return
+				} else if e2e.IsExpectedRemoteTestError(errorMsg) {
+					t.Skipf("API call failed as expected with test credentials: %s", errorMsg)
 				}
 				t.Fatalf("Unexpected error from create_integration: %s", errorMsg)
 			}
 
+			integrationCreated = true
 			t.Logf("Successfully created integration: %s", testIntegrationName)
 		})
 
@@ -78,6 +83,10 @@ func TestIntegrationsTools(t *testing.T) {
 		})
 
 		t.Run("get_integration", func(t *testing.T) {
+			if !integrationCreated {
+				t.Skip("create_integration did not create a test integration")
+			}
+
 			args := map[string]interface{}{
 				"name": testIntegrationName,
 			}
@@ -104,6 +113,10 @@ func TestIntegrationsTools(t *testing.T) {
 		})
 
 		t.Run("delete_integration", func(t *testing.T) {
+			if !integrationCreated {
+				t.Skip("create_integration did not create a test integration")
+			}
+
 			args := map[string]interface{}{
 				"name": testIntegrationName,
 			}
@@ -130,6 +143,10 @@ func TestIntegrationsTools(t *testing.T) {
 		})
 
 		t.Run("verify_integration_deleted", func(t *testing.T) {
+			if !integrationCreated {
+				t.Skip("create_integration did not create a test integration")
+			}
+
 			args := map[string]interface{}{
 				"name": testIntegrationName,
 			}
