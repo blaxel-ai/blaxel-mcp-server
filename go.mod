@@ -3,15 +3,15 @@ module github.com/blaxel-ai/blaxel-mcp-server
 go 1.24.5
 
 require (
+	github.com/blaxel-ai/sdk-go v0.18.0
 	github.com/blaxel-ai/toolkit v0.1.38
 	github.com/joho/godotenv v1.5.1
 	github.com/mark3labs/mcp-go v0.47.0
-	github.com/oapi-codegen/runtime v1.1.1
+	github.com/oapi-codegen/runtime v1.4.1
 )
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
-	github.com/blaxel-ai/sdk-go v0.18.0 // indirect
 	github.com/getkin/kin-openapi v0.128.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
