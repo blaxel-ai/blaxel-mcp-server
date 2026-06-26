@@ -31,6 +31,7 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 
 	// List model APIs tool
 	listModelAPIsTool := mcp.NewTool("list_model_apis",
+		mcp.WithToolTitle("List Model APIs"),
 		mcp.WithTitleAnnotation("List Model APIs"),
 		mcp.WithDescription("List all model APIs in the workspace"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -62,6 +63,7 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 
 	// Get model API tool
 	getModelAPITool := mcp.NewTool("get_model_api",
+		mcp.WithToolTitle("Get Model API"),
 		mcp.WithTitleAnnotation("Get Model API"),
 		mcp.WithDescription("Get details of a specific model API"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -99,10 +101,11 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 	if !isReadOnly {
 		// Create model API tool
 		createModelAPITool := mcp.NewTool("create_model_api",
+			mcp.WithToolTitle("Create Model API"),
 			mcp.WithTitleAnnotation("Create Model API"),
 			mcp.WithDescription("Create a model API with flexible integration options"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
@@ -169,6 +172,7 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 
 		// Delete model API tool
 		deleteModelAPITool := mcp.NewTool("delete_model_api",
+			mcp.WithToolTitle("Delete Model API"),
 			mcp.WithTitleAnnotation("Delete Model API"),
 			mcp.WithDescription("Delete a model API by name"),
 			mcp.WithReadOnlyHintAnnotation(false),

@@ -29,6 +29,7 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler, cfg *config.C
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
 	// List agents tool
 	listAgentsTool := mcp.NewTool("list_agents",
+		mcp.WithToolTitle("List Agents"),
 		mcp.WithTitleAnnotation("List Agents"),
 		mcp.WithDescription("List all agents in the workspace"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -60,6 +61,7 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler, cfg *config.C
 
 	// Get agent tool
 	getAgentTool := mcp.NewTool("get_agent",
+		mcp.WithToolTitle("Get Agent"),
 		mcp.WithTitleAnnotation("Get Agent"),
 		mcp.WithDescription("Get details of a specific agent"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -96,6 +98,7 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler, cfg *config.C
 	// Delete agent tool (only if not in readonly mode)
 	if !isReadOnly {
 		deleteAgentTool := mcp.NewTool("delete_agent",
+			mcp.WithToolTitle("Delete Agent"),
 			mcp.WithTitleAnnotation("Delete Agent"),
 			mcp.WithDescription("Delete an agent from the workspace"),
 			mcp.WithReadOnlyHintAnnotation(false),

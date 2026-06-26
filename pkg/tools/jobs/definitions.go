@@ -30,6 +30,7 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler, cfg *config.Confi
 
 	// List jobs tool
 	listJobsTool := mcp.NewTool("list_jobs",
+		mcp.WithToolTitle("List Jobs"),
 		mcp.WithTitleAnnotation("List Jobs"),
 		mcp.WithDescription("List all jobs in the workspace"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -61,6 +62,7 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler, cfg *config.Confi
 
 	// Get job tool
 	getJobTool := mcp.NewTool("get_job",
+		mcp.WithToolTitle("Get Job"),
 		mcp.WithTitleAnnotation("Get Job"),
 		mcp.WithDescription("Get details of a specific job"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -98,6 +100,7 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler, cfg *config.Confi
 	if !isReadOnly {
 		// Delete job tool
 		deleteJobTool := mcp.NewTool("delete_job",
+			mcp.WithToolTitle("Delete Job"),
 			mcp.WithTitleAnnotation("Delete Job"),
 			mcp.WithDescription("Delete a job from the workspace"),
 			mcp.WithReadOnlyHintAnnotation(false),

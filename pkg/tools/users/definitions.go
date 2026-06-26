@@ -32,6 +32,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 
 	// List workspace users tool
 	listUsersTool := mcp.NewTool("list_workspace_users",
+		mcp.WithToolTitle("List Workspace Users"),
 		mcp.WithTitleAnnotation("List Workspace Users"),
 		mcp.WithDescription("List all users in the workspace"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -63,6 +64,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 
 	// Get user tool
 	getUserTool := mcp.NewTool("get_workspace_user",
+		mcp.WithToolTitle("Get Workspace User"),
 		mcp.WithTitleAnnotation("Get Workspace User"),
 		mcp.WithDescription("Get details of a specific user in the workspace"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -100,12 +102,13 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 	if !isReadOnly {
 		// Invite user tool
 		inviteUserTool := mcp.NewTool("invite_workspace_user",
+			mcp.WithToolTitle("Invite Workspace User"),
 			mcp.WithTitleAnnotation("Invite Workspace User"),
 			mcp.WithDescription("Invite a user to the workspace"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(false),
-			mcp.WithOpenWorldHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithString("email",
 				mcp.Required(),
 				mcp.Description("Email of the user to invite"),
@@ -140,6 +143,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 
 		// Update user role tool
 		updateUserRoleTool := mcp.NewTool("update_workspace_user_role",
+			mcp.WithToolTitle("Update Workspace User Role"),
 			mcp.WithTitleAnnotation("Update Workspace User Role"),
 			mcp.WithDescription("Update a user's role in the workspace"),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -184,6 +188,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 
 		// Remove user tool
 		removeUserTool := mcp.NewTool("remove_workspace_user",
+			mcp.WithToolTitle("Remove Workspace User"),
 			mcp.WithTitleAnnotation("Remove Workspace User"),
 			mcp.WithDescription("Remove a user from the workspace"),
 			mcp.WithReadOnlyHintAnnotation(false),

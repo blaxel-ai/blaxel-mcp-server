@@ -73,6 +73,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 
 	// Run/Chat with Agent
 	runAgentTool := mcp.NewTool("run_agent",
+		mcp.WithToolTitle("Run Agent"),
 		mcp.WithTitleAnnotation("Run Agent"),
 		mcp.WithDescription("Chat with or invoke an agent"),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -122,6 +123,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 
 	// Trigger/Run Job
 	runJobTool := mcp.NewTool("run_job",
+		mcp.WithToolTitle("Run Job"),
 		mcp.WithTitleAnnotation("Run Job"),
 		mcp.WithDescription("Trigger or run a job"),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -162,6 +164,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 
 	// Invoke/Run Model
 	runModelTool := mcp.NewTool("run_model",
+		mcp.WithToolTitle("Run Model"),
 		mcp.WithTitleAnnotation("Run Model"),
 		mcp.WithDescription("Invoke a Blaxel Model API with a POST request. The request body should follow the target model endpoint schema; see https://docs.blaxel.ai/Models/Query-a-model."),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -172,9 +175,9 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			mcp.Required(),
 			mcp.Description("Name of the model API to invoke"),
 		),
-		mcp.WithString("body",
+		mcp.WithAny("body",
 			mcp.Required(),
-			mcp.Description("JSON request body for the Blaxel Model API endpoint; see https://docs.blaxel.ai/Models/Query-a-model."),
+			mcp.Description("JSON request body for the Blaxel Model API endpoint, as an object or JSON string; see https://docs.blaxel.ai/Models/Query-a-model."),
 		),
 		mcp.WithString("path",
 			mcp.Description("Blaxel Model API path to invoke, such as /v1/chat/completions; see https://docs.blaxel.ai/Models/Query-a-model."),
@@ -194,8 +197,11 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			return mcp.NewToolResultError("model name is required"), nil
 		}
 
-		body := request.GetString("body", "")
-		if body == "" {
+		body, ok, err := getJSONBodyArgument(request, "body")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		if !ok {
 			return mcp.NewToolResultError("body is required"), nil
 		}
 
@@ -214,6 +220,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 
 	// Execute a command in a Sandbox process.
 	runSandboxCommandTool := mcp.NewTool("run_sandbox_command",
+		mcp.WithToolTitle("Run Sandbox Command"),
 		mcp.WithTitleAnnotation("Run Sandbox Command"),
 		mcp.WithDescription("Execute a command in a Blaxel sandbox by creating a sandbox process with POST /process. See https://docs.blaxel.ai/Sandboxes/Processes."),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -288,6 +295,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	})
 
 	listSandboxProcessesTool := mcp.NewTool("list_sandbox_processes",
+		mcp.WithToolTitle("List Sandbox Processes"),
 		mcp.WithTitleAnnotation("List Sandbox Processes"),
 		mcp.WithDescription("List running and completed processes in a Blaxel sandbox with GET /process. See https://docs.blaxel.ai/Sandboxes/Processes."),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -312,6 +320,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	})
 
 	getSandboxProcessTool := mcp.NewTool("get_sandbox_process",
+		mcp.WithToolTitle("Get Sandbox Process"),
 		mcp.WithTitleAnnotation("Get Sandbox Process"),
 		mcp.WithDescription("Get process status and metadata from a Blaxel sandbox with GET /process/{identifier}. See https://docs.blaxel.ai/Sandboxes/Processes."),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -340,6 +349,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	})
 
 	getSandboxProcessLogsTool := mcp.NewTool("get_sandbox_process_logs",
+		mcp.WithToolTitle("Get Sandbox Process Logs"),
 		mcp.WithTitleAnnotation("Get Sandbox Process Logs"),
 		mcp.WithDescription("Get stdout and stderr logs for a Blaxel sandbox process with GET /process/{identifier}/logs. See https://docs.blaxel.ai/Sandboxes/Processes."),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -368,6 +378,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	})
 
 	stopSandboxProcessTool := mcp.NewTool("stop_sandbox_process",
+		mcp.WithToolTitle("Stop Sandbox Process"),
 		mcp.WithTitleAnnotation("Stop Sandbox Process"),
 		mcp.WithDescription("Gracefully stop a process in a Blaxel sandbox with DELETE /process/{identifier}. See https://docs.blaxel.ai/Sandboxes/Processes."),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -396,6 +407,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	})
 
 	killSandboxProcessTool := mcp.NewTool("kill_sandbox_process",
+		mcp.WithToolTitle("Kill Sandbox Process"),
 		mcp.WithTitleAnnotation("Kill Sandbox Process"),
 		mcp.WithDescription("Force-kill a process in a Blaxel sandbox with DELETE /process/{identifier}/kill. See https://docs.blaxel.ai/Sandboxes/Processes."),
 		mcp.WithReadOnlyHintAnnotation(false),
@@ -434,6 +446,27 @@ func sandboxProcessLookupArgs(request mcp.CallToolRequest) (string, string, *mcp
 		return "", "", mcp.NewToolResultError("process identifier is required")
 	}
 	return name, identifier, nil
+}
+
+func getJSONBodyArgument(request mcp.CallToolRequest, key string) (string, bool, error) {
+	args := request.GetArguments()
+	rawBody, ok := args[key]
+	if !ok || rawBody == nil {
+		return "", false, nil
+	}
+
+	if body, ok := rawBody.(string); ok {
+		if body == "" {
+			return "", false, nil
+		}
+		return body, true, nil
+	}
+
+	body, err := json.Marshal(rawBody)
+	if err != nil {
+		return "", true, fmt.Errorf("%s must be a JSON object or JSON string: %w", key, err)
+	}
+	return string(body), true, nil
 }
 
 func callSandbox(ctx context.Context, handler RuntimeHandler, cfg *config.Config, workspace, name, body, method, path string) (*mcp.CallToolResult, error) {

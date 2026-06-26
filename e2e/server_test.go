@@ -234,8 +234,14 @@ func assertAnthropicToolReviewReadiness(t *testing.T, result *mcp.ListToolsResul
 		if strings.TrimSpace(tool.Description) == "" {
 			t.Errorf("tool %s is missing a description", tool.Name)
 		}
+		if strings.TrimSpace(tool.Title) == "" {
+			t.Errorf("tool %s is missing top-level title", tool.Name)
+		}
 		if strings.TrimSpace(tool.Annotations.Title) == "" {
 			t.Errorf("tool %s is missing Anthropic-required title annotation", tool.Name)
+		}
+		if tool.Title != "" && tool.Annotations.Title != "" && tool.Title != tool.Annotations.Title {
+			t.Errorf("tool %s top-level title %q does not match annotation title %q", tool.Name, tool.Title, tool.Annotations.Title)
 		}
 		if tool.Annotations.ReadOnlyHint == nil {
 			t.Errorf("tool %s is missing readOnlyHint annotation", tool.Name)
@@ -251,6 +257,9 @@ func assertAnthropicToolReviewReadiness(t *testing.T, result *mcp.ListToolsResul
 		}
 		if toolNameRequiresDestructiveHint(tool.Name) && (tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint) {
 			t.Errorf("tool %s should be annotated destructive because it performs an unsafe action", tool.Name)
+		}
+		if toolNameRequiresAdditiveHint(tool.Name) && (tool.Annotations.DestructiveHint == nil || *tool.Annotations.DestructiveHint) {
+			t.Errorf("tool %s should be annotated non-destructive because it only performs additive updates", tool.Name)
 		}
 	}
 
@@ -314,11 +323,19 @@ func toolNameRequiresReadOnlyHint(name string) bool {
 }
 
 func toolNameRequiresDestructiveHint(name string) bool {
+	for _, exactName := range []string{
+		"create_integration",
+		"create_mcp_server",
+		"create_sandbox",
+		"update_service_account",
+		"update_workspace_user_role",
+	} {
+		if name == exactName {
+			return true
+		}
+	}
 	for _, prefix := range []string{
-		"create_",
-		"update_",
 		"delete_",
-		"invite_",
 		"remove_",
 		"run_",
 		"stop_",
@@ -328,6 +345,19 @@ func toolNameRequiresDestructiveHint(name string) bool {
 		"local_run_",
 	} {
 		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func toolNameRequiresAdditiveHint(name string) bool {
+	for _, exactName := range []string{
+		"create_model_api",
+		"create_service_account",
+		"invite_workspace_user",
+	} {
+		if name == exactName {
 			return true
 		}
 	}

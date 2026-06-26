@@ -31,6 +31,7 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 
 	// List integrations tool
 	listIntegrationsTool := mcp.NewTool("list_integrations",
+		mcp.WithToolTitle("List Integrations"),
 		mcp.WithTitleAnnotation("List Integrations"),
 		mcp.WithDescription("List all integration connections in the workspace"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -62,6 +63,7 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 
 	// Get integration tool
 	getIntegrationTool := mcp.NewTool("get_integration",
+		mcp.WithToolTitle("Get Integration"),
 		mcp.WithTitleAnnotation("Get Integration"),
 		mcp.WithDescription("Get details of a specific integration connection"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -99,6 +101,7 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 	if !isReadOnly {
 		// Create integration tool
 		createIntegrationTool := mcp.NewTool("create_integration",
+			mcp.WithToolTitle("Create Integration"),
 			mcp.WithTitleAnnotation("Create Integration"),
 			mcp.WithDescription("Create a new integration connection"),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -179,6 +182,7 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 
 		// Delete integration tool
 		deleteIntegrationTool := mcp.NewTool("delete_integration",
+			mcp.WithToolTitle("Delete Integration"),
 			mcp.WithTitleAnnotation("Delete Integration"),
 			mcp.WithDescription("Delete an integration connection by name"),
 			mcp.WithReadOnlyHintAnnotation(false),

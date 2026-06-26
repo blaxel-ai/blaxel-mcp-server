@@ -19,6 +19,11 @@ type SDKHandler struct {
 	readOnly  bool
 }
 
+type createdServiceAccountResponse struct {
+	ClientID     *string `json:"client_id,omitempty"`
+	ClientSecret *string `json:"client_secret,omitempty"`
+}
+
 // NewSDKHandler creates a new SDK-based service account handler
 func NewSDKHandler(cfg *config.Config) (ServiceAccountHandler, error) {
 	sdkClient, err := client.NewSDKClient(cfg)
@@ -39,6 +44,30 @@ func resolveHandler(defaultHandler ServiceAccountHandler, cfg *config.Config, wo
 		return defaultHandler, nil
 	}
 	return NewSDKHandler(overriddenCfg)
+}
+
+func parseCreatedServiceAccount(account *sdk.CreateWorkspaceServiceAccountResponse) (*createdServiceAccountResponse, error) {
+	if account.JSON200 != nil {
+		return &createdServiceAccountResponse{
+			ClientID:     account.JSON200.ClientId,
+			ClientSecret: account.JSON200.ClientSecret,
+		}, nil
+	}
+
+	if account.StatusCode() < 200 || account.StatusCode() >= 300 {
+		return nil, fmt.Errorf("failed to create service account with status %d", account.StatusCode())
+	}
+
+	if len(account.Body) == 0 {
+		return nil, fmt.Errorf("no service account created")
+	}
+
+	var createdAccount createdServiceAccountResponse
+	if err := json.Unmarshal(account.Body, &createdAccount); err != nil {
+		return nil, fmt.Errorf("failed to parse service account creation response: %w", err)
+	}
+
+	return &createdAccount, nil
 }
 
 // ListServiceAccounts implements ServiceAccountHandler.ListServiceAccounts
@@ -143,23 +172,25 @@ func (h *SDKHandler) CreateServiceAccount(ctx context.Context, name string) ([]b
 		return nil, fmt.Errorf("failed to create service account: %w", err)
 	}
 
-	if account.JSON200 == nil {
-		return nil, fmt.Errorf("no service account created")
+	createdAccount, err := parseCreatedServiceAccount(account)
+	if err != nil {
+		return nil, err
 	}
 
+	serviceAccount := map[string]interface{}{
+		"name":      name,
+		"client_id": "",
+	}
 	result := map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Service account '%s' created successfully", name),
-		"service_account": map[string]interface{}{
-			"name":      name,
-			"client_id": "",
-		},
+		"success":         true,
+		"message":         fmt.Sprintf("Service account '%s' created successfully", name),
+		"service_account": serviceAccount,
 	}
 
-	if account.JSON200 != nil && account.JSON200.ClientId != nil {
-		result["service_account"].(map[string]interface{})["client_id"] = *account.JSON200.ClientId
-		if account.JSON200.ClientSecret != nil {
-			result["service_account"].(map[string]interface{})["client_secret"] = *account.JSON200.ClientSecret
+	if createdAccount.ClientID != nil {
+		serviceAccount["client_id"] = *createdAccount.ClientID
+		if createdAccount.ClientSecret != nil {
+			serviceAccount["client_secret"] = *createdAccount.ClientSecret
 			result["message"] = fmt.Sprintf("Service account '%s' created successfully. Save the client_secret as it won't be shown again.", name)
 		}
 	}
