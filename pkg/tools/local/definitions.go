@@ -35,6 +35,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 	// Quick start guide tool
 	quickStartTool := mcp.NewTool("local_quick_start_guide",
+		mcp.WithToolTitle("Local Quick Start Guide"),
 		mcp.WithTitleAnnotation("Local Quick Start Guide"),
 		mcp.WithDescription("Get a quick start guide for creating Blaxel resources without credentials"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -64,6 +65,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 	// List templates tool
 	listTemplatesTool := mcp.NewTool("local_list_templates",
+		mcp.WithToolTitle("Local List Templates"),
 		mcp.WithTitleAnnotation("Local List Templates"),
 		mcp.WithDescription("List available templates for a specific resource type"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -99,6 +101,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 	if !isReadOnly {
 		// Create agent locally
 		createAgentTool := mcp.NewTool("local_create_agent",
+			mcp.WithToolTitle("Local Create Agent"),
 			mcp.WithTitleAnnotation("Local Create Agent"),
 			mcp.WithDescription("Create a new Blaxel agent app project locally using CLI"),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -136,6 +139,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 		// Create job locally
 		createJobTool := mcp.NewTool("local_create_job",
+			mcp.WithToolTitle("Local Create Job"),
 			mcp.WithTitleAnnotation("Local Create Job"),
 			mcp.WithDescription("Create a new Blaxel job project locally using CLI"),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -173,6 +177,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 		// Create MCP server locally
 		createMCPServerTool := mcp.NewTool("local_create_mcp_server",
+			mcp.WithToolTitle("Local Create MCP Server"),
 			mcp.WithTitleAnnotation("Local Create MCP Server"),
 			mcp.WithDescription("Create a new Blaxel MCP server project locally using CLI"),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -210,6 +215,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 		// Create sandbox locally
 		createSandboxTool := mcp.NewTool("local_create_sandbox",
+			mcp.WithToolTitle("Local Create Sandbox"),
 			mcp.WithTitleAnnotation("Local Create Sandbox"),
 			mcp.WithDescription("Create a new Blaxel sandbox project locally using CLI"),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -247,6 +253,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 		// Deploy directory
 		deployTool := mcp.NewTool("local_deploy_directory",
+			mcp.WithToolTitle("Local Deploy Directory"),
 			mcp.WithTitleAnnotation("Local Deploy Directory"),
 			mcp.WithDescription("Deploy a local directory containing agent, MCP server, or job code to Blaxel"),
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -275,6 +282,7 @@ func RegisterLocalTools(s *server.MCPServer, handler LocalHandler, cfg *config.C
 
 		// Run deployed resource
 		runTool := mcp.NewTool("local_run_deployed_resource",
+			mcp.WithToolTitle("Local Run Deployed Resource"),
 			mcp.WithTitleAnnotation("Local Run Deployed Resource"),
 			mcp.WithDescription("Run a deployed resource on Blaxel"),
 			mcp.WithReadOnlyHintAnnotation(false),
