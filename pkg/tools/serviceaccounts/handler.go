@@ -128,35 +128,6 @@ func (h *SDKHandler) ListServiceAccounts(ctx context.Context, filter string) ([]
 	return []byte(formattedResult.String()), nil
 }
 
-// GetServiceAccount implements ServiceAccountHandler.GetServiceAccount
-func (h *SDKHandler) GetServiceAccount(ctx context.Context, clientID string) ([]byte, error) {
-	if h.sdkClient == nil {
-		return nil, fmt.Errorf("SDK client not initialized")
-	}
-
-	// List all service accounts and find the one with matching client ID
-	serviceAccounts, err := h.sdkClient.GetWorkspaceServiceAccountsWithResponse(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get service account: %w", err)
-	}
-
-	if serviceAccounts.JSON200 == nil {
-		return nil, fmt.Errorf("no service accounts found")
-	}
-
-	for _, account := range *serviceAccounts.JSON200 {
-		if account.ClientId != nil && *account.ClientId == clientID {
-			jsonData, err := json.MarshalIndent(account, "", "  ")
-			if err != nil {
-				return nil, fmt.Errorf("failed to format service account data: %w", err)
-			}
-			return jsonData, nil
-		}
-	}
-
-	return nil, fmt.Errorf("service account with client ID '%s' not found", clientID)
-}
-
 // CreateServiceAccount implements ServiceAccountHandler.CreateServiceAccount
 func (h *SDKHandler) CreateServiceAccount(ctx context.Context, name string) ([]byte, error) {
 	if h.sdkClient == nil {

@@ -12,7 +12,6 @@ import (
 // ServiceAccountHandler defines the interface for service account operations
 type ServiceAccountHandler interface {
 	ListServiceAccounts(ctx context.Context, filter string) ([]byte, error)
-	GetServiceAccount(ctx context.Context, clientID string) ([]byte, error)
 	CreateServiceAccount(ctx context.Context, name string) ([]byte, error)
 	DeleteServiceAccount(ctx context.Context, clientID string) ([]byte, error)
 	UpdateServiceAccount(ctx context.Context, clientID, description string) ([]byte, error)
@@ -55,42 +54,6 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 		filter := request.GetString("filter", "")
 
 		result, err := activeHandler.ListServiceAccounts(ctx, filter)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		return mcp.NewToolResultText(string(result)), nil
-	})
-
-	// Get service account tool
-	getServiceAccountTool := mcp.NewTool("get_service_account",
-		mcp.WithToolTitle("Get Service Account"),
-		mcp.WithTitleAnnotation("Get Service Account"),
-		mcp.WithDescription("Get details of a service account by client ID"),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithIdempotentHintAnnotation(true),
-		mcp.WithOpenWorldHintAnnotation(false),
-		mcp.WithString("name",
-			mcp.Required(),
-			mcp.Description("Client ID of the service account to retrieve"),
-		),
-		mcp.WithString("workspace",
-			mcp.Description("Optional workspace name to override the default workspace"),
-		),
-	)
-
-	s.AddTool(getServiceAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
-		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
-		}
-		clientID := request.GetString("name", "")
-		if clientID == "" {
-			return mcp.NewToolResultError("name is required"), nil
-		}
-
-		result, err := activeHandler.GetServiceAccount(ctx, clientID)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
