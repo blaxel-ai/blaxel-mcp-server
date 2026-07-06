@@ -109,7 +109,7 @@ func (h *SDKHandler) RunJob(ctx context.Context, name, parameters string) (strin
 		"job",
 		name,
 		"POST",
-		"",
+		"/executions",
 		bodyData,
 	)
 	if err != nil {
