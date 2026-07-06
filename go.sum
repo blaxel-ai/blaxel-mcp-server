@@ -1,8 +1,8 @@
 github.com/RaveNoX/go-jsoncommentstrip v1.0.0/go.mod h1:78ihd09MekBnJnxpICcwzCMzGrKSKYe4AqU6PDYYpjk=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0 h1:axGnT1gRIfimI7gJifB699GoE/oq+F2MU7Dml6nw9rQ=
 github.com/apapsch/go-jsonmerge/v2 v2.0.0/go.mod h1:lvDnEdqiQrp0O42VQGgmlKpxL1AP2+08jFMw88y4klk=
-github.com/blaxel-ai/sdk-go v0.18.0 h1:3dEgyfxCnowHHlirjnxP5GCAg6sbGl+PfLnIttMBWfE=
-github.com/blaxel-ai/sdk-go v0.18.0/go.mod h1:qnHmO29t6qLcjsbVE8EMdSe/zp96Le3lppNA0pr7k0k=
+github.com/blaxel-ai/sdk-go v0.24.2 h1:+dqw4T15PfSB6LHt+ahLQ6sPb/SPVLLHKq++6I8rTkw=
+github.com/blaxel-ai/sdk-go v0.24.2/go.mod h1:LQfob9k0YL67lZfMV7G3AU+Unr3le/G1erHP2DQ5Y1k=
 github.com/blaxel-ai/toolkit v0.1.38 h1:gPZNOk2DA6ZPzyn8p6ubYahbMgnGFS+sVvxzfpcdvpk=
 github.com/blaxel-ai/toolkit v0.1.38/go.mod h1:aCybPShlQ3ag/a8n7GCkV6zzKnyPQSnUt/uDvXRLRfA=
 github.com/bmatcuk/doublestar v1.1.1/go.mod h1:UD6OnuiIn0yFxxA2le/rnRU1G4RaI4UvFv1sNto9p6w=
