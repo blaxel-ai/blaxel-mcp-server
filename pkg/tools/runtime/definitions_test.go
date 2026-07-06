@@ -237,6 +237,34 @@ func TestSDKHandlerRunAgentSendsInputsPayload(t *testing.T) {
 	}
 }
 
+func TestSDKHandlerRunJobTargetsExecutionsPath(t *testing.T) {
+	handler, requests := newSDKHandlerCapture(t, "job", "fixture-job", "/runtime/job")
+
+	result, err := handler.RunJob(context.Background(), "fixture-job", `{"input":"ping"}`)
+	if err != nil {
+		t.Fatalf("RunJob returned error: %v", err)
+	}
+	if !strings.Contains(result, `"ok": true`) {
+		t.Fatalf("expected formatted JSON response, got %q", result)
+	}
+
+	request := requests.last(t)
+	if request.method != http.MethodPost {
+		t.Fatalf("expected POST runtime request, got %s", request.method)
+	}
+	if request.path != "/runtime/job/executions" {
+		t.Fatalf("expected job execution path, got %q", request.path)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(request.body), &decoded); err != nil {
+		t.Fatalf("expected JSON body, got %q: %v", request.body, err)
+	}
+	if decoded["input"] != "ping" {
+		t.Fatalf("expected input ping, got %v", decoded["input"])
+	}
+}
+
 func TestSDKHandlerRunModelSendsDecodedJSONBody(t *testing.T) {
 	handler, requests := newSDKHandlerCapture(t, "model", "fixture-model", "/runtime/model")
 
