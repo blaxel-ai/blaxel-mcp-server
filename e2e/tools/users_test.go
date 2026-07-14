@@ -59,7 +59,7 @@ func TestUsersTools(t *testing.T) {
 
 		t.Run("with_email", func(t *testing.T) {
 			args := map[string]interface{}{
-				"email": "test@example.com",
+				"email": legacyUserEmail,
 			}
 
 			result, err := client.CallTool("get_workspace_user", args)
@@ -111,7 +111,7 @@ func TestUsersTools(t *testing.T) {
 
 		t.Run("with_email", func(t *testing.T) {
 			args := map[string]interface{}{
-				"email": "test@example.com",
+				"email": legacyUserEmail,
 			}
 
 			result, err := client.CallTool("invite_workspace_user", args)
@@ -138,7 +138,7 @@ func TestUsersTools(t *testing.T) {
 
 		t.Run("with_role", func(t *testing.T) {
 			args := map[string]interface{}{
-				"email": "test@example.com",
+				"email": legacyUserEmail,
 				"role":  "member",
 			}
 
@@ -192,7 +192,7 @@ func TestUsersTools(t *testing.T) {
 
 		t.Run("missing_role", func(t *testing.T) {
 			args := map[string]interface{}{
-				"email": "test@example.com",
+				"email": legacyUserEmail,
 				// Missing 'role' field
 			}
 
@@ -217,7 +217,7 @@ func TestUsersTools(t *testing.T) {
 
 		t.Run("with_email_and_role", func(t *testing.T) {
 			args := map[string]interface{}{
-				"email": "test@example.com",
+				"email": legacyUserEmail,
 				"role":  "admin",
 			}
 
@@ -270,7 +270,7 @@ func TestUsersTools(t *testing.T) {
 
 		t.Run("with_email", func(t *testing.T) {
 			args := map[string]interface{}{
-				"email": "test@example.com",
+				"email": legacyUserEmail,
 			}
 
 			result, err := client.CallTool("remove_workspace_user", args)

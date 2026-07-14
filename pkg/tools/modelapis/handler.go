@@ -117,10 +117,35 @@ func (h *SDKHandler) CreateModelAPI(ctx context.Context, name, model, endpoint, 
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	// Check for integration parameters
+	// The tool supports exactly one integration mode: reference an existing
+	// connection, or create an inline connection from provider + apiKey. Config
+	// belongs to the inline integration, not the model runtime.
 	hasExisting := integrationConnectionName != ""
 	hasProvider := provider != ""
 	hasApiKey := apiKey != ""
+	if hasExisting && (hasProvider || hasApiKey || len(config) > 0) {
+		return nil, fmt.Errorf("integrationConnectionName cannot be combined with provider, apiKey, or config")
+	}
+	if !hasExisting {
+		if !hasProvider {
+			if hasApiKey || len(config) > 0 {
+				return nil, fmt.Errorf("provider is required when specifying apiKey or config")
+			}
+			return nil, fmt.Errorf("must provide either integrationConnectionName or provider with apiKey")
+		}
+		if !hasApiKey {
+			return nil, fmt.Errorf("apiKey is required when specifying provider")
+		}
+	}
+
+	inlineConfig := make(map[string]string, len(config))
+	for key, value := range config {
+		stringValue, ok := value.(string)
+		if !ok {
+			return nil, fmt.Errorf("config.%s must be a string", key)
+		}
+		inlineConfig[key] = stringValue
+	}
 
 	// Build model API request
 	modelData := sdk.CreateModelJSONRequestBody{
@@ -133,21 +158,18 @@ func (h *SDKHandler) CreateModelAPI(ctx context.Context, name, model, endpoint, 
 			},
 		},
 	}
+	if endpoint != "" {
+		modelData.Spec.Runtime.EndpointName = &endpoint
+	}
 
-	// Handle integration configuration
+	// Handle integration configuration.
 	var integrationName string
+	inlineIntegrationOwned := false
 	if hasExisting {
-		// Use existing integration connection
-		if integrationConnectionName == "" {
-			return nil, fmt.Errorf("integrationConnectionName cannot be empty")
-		}
 		integrationName = integrationConnectionName
-	} else if hasProvider {
-		if !hasApiKey {
-			return nil, fmt.Errorf("api key is required when specifying provider")
-		}
-
-		// Generate a unique name for the integration
+	} else {
+		// Generate a deterministic name. A collision is an error: this invocation
+		// must never claim or overwrite a connection it did not create.
 		integrationName = fmt.Sprintf("%s-%s-integration", name, provider)
 
 		// Create the integration
@@ -160,28 +182,23 @@ func (h *SDKHandler) CreateModelAPI(ctx context.Context, name, model, endpoint, 
 			},
 		}
 
-		// Add API key to secrets
-		secrets := map[string]string{
-			"apiKey": apiKey,
-		}
+		// Add API key and optional provider configuration to the inline connection.
+		secrets := map[string]string{"apiKey": apiKey}
 		integrationData.Spec.Secret = &secrets
+		if len(inlineConfig) > 0 {
+			integrationData.Spec.Config = &inlineConfig
+		}
 
-		// Create the integration
+		// Create the integration.
 		integrationResp, err := h.sdkClient.CreateIntegrationConnectionWithResponse(ctx, integrationData)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create inline integration: %w", err)
 		}
 
-		if integrationResp.StatusCode() >= 400 {
-			if integrationResp.StatusCode() == 409 {
-				// Integration might already exist, try to use it
-				logger.Printf("Integration '%s' already exists, will attempt to use it", integrationName)
-			} else {
-				return nil, fmt.Errorf("failed to create integration with status %d", integrationResp.StatusCode())
-			}
+		if integrationResp.StatusCode() < http.StatusOK || integrationResp.StatusCode() >= http.StatusMultipleChoices {
+			return nil, fmt.Errorf("failed to create inline integration with status %d", integrationResp.StatusCode())
 		}
-	} else {
-		return nil, fmt.Errorf("must provide either integrationConnectionName to reference an existing integration or provider with apiKey to create a new one")
+		inlineIntegrationOwned = true
 	}
 
 	// Set the integration connection on the model
@@ -189,7 +206,7 @@ func (h *SDKHandler) CreateModelAPI(ctx context.Context, name, model, endpoint, 
 		connections := sdk.IntegrationConnectionsList{integrationName}
 
 		modelData.Spec.IntegrationConnections = &connections
-		if provider != "" {
+		if hasProvider {
 			modelData.Spec.Runtime.Type = &provider
 		} else {
 			response, err := h.sdkClient.GetIntegrationConnectionWithResponse(ctx, integrationName)
@@ -206,14 +223,18 @@ func (h *SDKHandler) CreateModelAPI(ctx context.Context, name, model, endpoint, 
 	// Create the model API
 	modelResp, err := h.sdkClient.CreateModelWithResponse(ctx, modelData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create model API: %w", err)
+		createErr := fmt.Errorf("failed to create model API: %w", err)
+		return nil, h.withInlineIntegrationRollback(ctx, integrationName, inlineIntegrationOwned, createErr)
 	}
 
 	if modelResp.JSON200 == nil {
-		if modelResp.StatusCode() == 409 {
-			return nil, fmt.Errorf("model API with name '%s' already exists", name)
+		var createErr error
+		if modelResp.StatusCode() == http.StatusConflict {
+			createErr = fmt.Errorf("model API with name '%s' already exists", name)
+		} else {
+			createErr = fmt.Errorf("failed to create model API with status %d", modelResp.StatusCode())
 		}
-		return nil, fmt.Errorf("failed to create model API with status %d", modelResp.StatusCode())
+		return nil, h.withInlineIntegrationRollback(ctx, integrationName, inlineIntegrationOwned, createErr)
 	}
 
 	// Check if we should wait for completion
@@ -222,70 +243,47 @@ func (h *SDKHandler) CreateModelAPI(ctx context.Context, name, model, endpoint, 
 		waitForCompletionBool = waitForCompletion == "true"
 	}
 
-	// Wait for the model API to reach a final status if requested
+	// Wait for the model API to reach a final status if requested.
+	deploymentFinalStatus := ""
 	if waitForCompletionBool {
 		logger.Printf("Waiting for model API '%s' to deploy...", name)
 		checker := NewModelAPIStatusChecker(h.sdkClient)
 		err = utils.WaitForResourceStatus(ctx, name, checker)
-		if err != nil {
-			// Even if status waiting fails, we still created the model API
-			// Return a warning but don't fail the entire operation
-			logger.Printf("Warning: Model API created but status check failed: %v", err)
-			result := map[string]interface{}{
-				"success": true,
-				"message": fmt.Sprintf("Model API '%s' created successfully (status check failed: %v)", name, err),
-				"model_api": map[string]interface{}{
-					"name": name,
-				},
-			}
-
-			// Add details to result
-			if integrationName != "" {
-				result["model_api"].(map[string]interface{})["integrationConnection"] = integrationName
-				if hasProvider {
-					result["message"] = fmt.Sprintf("Model API '%s' created successfully with inline integration '%s' (status check failed: %v)", name, integrationName, err)
-					result["model_api"].(map[string]interface{})["provider"] = provider
-				}
-			}
-
-			if model != "" {
-				result["model_api"].(map[string]interface{})["model"] = model
-			}
-
-			if endpoint != "" {
-				result["model_api"].(map[string]interface{})["endpoint"] = endpoint
-			}
-
-			jsonData, err := json.MarshalIndent(result, "", "  ")
-			if err != nil {
-				return nil, fmt.Errorf("failed to format response: %w", err)
-			}
-
-			return jsonData, nil
+		// FAILED is a terminal deployment result, so the wait is complete even
+		// though the generic status helper reports it as an unsuccessful deploy.
+		deploymentFinalStatus = checker.LastStatus()
+		if err != nil && deploymentFinalStatus != "FAILED" {
+			return nil, fmt.Errorf("model API '%s' status wait failed: %w", name, err)
 		}
 	} else {
 		logger.Printf("Skipping status wait for model API '%s'", name)
 	}
 
-	// Model API successfully created (and deployed if we waited)
-	deploymentStatus := "created"
-	if waitForCompletionBool {
-		deploymentStatus = "created and deployed"
+	// The model API was created and, when requested, reached a terminal state.
+	message := fmt.Sprintf("Model API '%s' created successfully", name)
+	switch deploymentFinalStatus {
+	case "DEPLOYED":
+		message = fmt.Sprintf("Model API '%s' created and deployed successfully", name)
+	case "FAILED":
+		message = fmt.Sprintf("Model API '%s' created; deployment reached terminal status FAILED", name)
 	}
 
 	result := map[string]interface{}{
 		"success": true,
-		"message": fmt.Sprintf("Model API '%s' %s successfully", name, deploymentStatus),
+		"message": message,
 		"model_api": map[string]interface{}{
 			"name": name,
 		},
+	}
+	if deploymentFinalStatus != "" {
+		result["model_api"].(map[string]interface{})["status"] = deploymentFinalStatus
 	}
 
 	// Add details to result
 	if integrationName != "" {
 		result["model_api"].(map[string]interface{})["integrationConnection"] = integrationName
 		if hasProvider {
-			result["message"] = fmt.Sprintf("Model API '%s' %s successfully with inline integration '%s'", name, deploymentStatus, integrationName)
+			result["message"] = fmt.Sprintf("%s with inline integration '%s'", message, integrationName)
 			result["model_api"].(map[string]interface{})["provider"] = provider
 		}
 	}
@@ -306,6 +304,22 @@ func (h *SDKHandler) CreateModelAPI(ctx context.Context, name, model, endpoint, 
 	return jsonData, nil
 }
 
+func (h *SDKHandler) withInlineIntegrationRollback(ctx context.Context, name string, owned bool, createErr error) error {
+	if !owned {
+		return createErr
+	}
+	rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	response, err := h.sdkClient.DeleteIntegrationConnectionWithResponse(rollbackCtx, name)
+	if err != nil {
+		return fmt.Errorf("%w; cleanup of inline integration '%s' failed", createErr, name)
+	}
+	if status := response.StatusCode(); status != http.StatusNotFound && (status < http.StatusOK || status >= http.StatusMultipleChoices) {
+		return fmt.Errorf("%w; cleanup of inline integration '%s' failed with status %d", createErr, name, status)
+	}
+	return createErr
+}
+
 // DeleteModelAPI implements ModelAPIHandler.DeleteModelAPI
 func (h *SDKHandler) DeleteModelAPI(ctx context.Context, name, waitForCompletion string) ([]byte, error) {
 	if h.sdkClient == nil {
@@ -313,9 +327,15 @@ func (h *SDKHandler) DeleteModelAPI(ctx context.Context, name, waitForCompletion
 	}
 
 	// Delete the model API
-	_, err := h.sdkClient.DeleteModelWithResponse(ctx, name)
+	resp, err := h.sdkClient.DeleteModelWithResponse(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete model API: %w", err)
+	}
+	if resp.StatusCode() == http.StatusNotFound {
+		return nil, fmt.Errorf("model API '%s' not found", name)
+	}
+	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("failed to delete model API '%s': status %d", name, resp.StatusCode())
 	}
 
 	// Check if we should wait for completion
@@ -328,22 +348,8 @@ func (h *SDKHandler) DeleteModelAPI(ctx context.Context, name, waitForCompletion
 	if waitForCompletionBool {
 		logger.Printf("Waiting for model API '%s' to be fully deleted...", name)
 		checker := NewModelAPIStatusChecker(h.sdkClient)
-		err = utils.WaitForResourceDeletion(ctx, name, checker)
-		if err != nil {
-			// Even if deletion polling fails, we still initiated the deletion
-			// Return a warning but don't fail the entire operation
-			logger.Printf("Warning: Model API deletion initiated but status check failed: %v", err)
-			result := map[string]interface{}{
-				"success": true,
-				"message": fmt.Sprintf("Model API '%s' deletion initiated (status check failed: %v)", name, err),
-			}
-
-			jsonData, err := json.MarshalIndent(result, "", "  ")
-			if err != nil {
-				return nil, fmt.Errorf("failed to format response: %w", err)
-			}
-
-			return jsonData, nil
+		if err = utils.WaitForResourceDeletion(ctx, name, checker); err != nil {
+			return nil, fmt.Errorf("model API '%s' deletion wait failed: %w", name, err)
 		}
 	} else {
 		logger.Printf("Skipping deletion wait for model API '%s'", name)
@@ -375,7 +381,8 @@ func (h *SDKHandler) IsReadOnly() bool {
 
 // ModelAPIStatusChecker implements StatusChecker for model APIs
 type ModelAPIStatusChecker struct {
-	sdkClient *sdk.ClientWithResponses
+	sdkClient  *sdk.ClientWithResponses
+	lastStatus string
 }
 
 // NewModelAPIStatusChecker creates a new model API status checker
@@ -385,7 +392,17 @@ func NewModelAPIStatusChecker(sdkClient *sdk.ClientWithResponses) *ModelAPIStatu
 
 // GetResource gets the model API resource
 func (m *ModelAPIStatusChecker) GetResource(ctx context.Context, name string) (interface{}, error) {
-	return m.sdkClient.GetModelWithResponse(ctx, name)
+	resp, err := m.sdkClient.GetModelWithResponse(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() == http.StatusNotFound {
+		return nil, fmt.Errorf("model API '%s' not found (status 404)", name)
+	}
+	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("get model API '%s' failed with status %d", name, resp.StatusCode())
+	}
+	return resp, nil
 }
 
 // ExtractStatus extracts status from model API response
@@ -394,9 +411,11 @@ func (m *ModelAPIStatusChecker) ExtractStatus(resource interface{}) string {
 	if modelResp, ok := resource.(*sdk.GetModelResponse); ok {
 		if modelResp.JSON200 != nil {
 			if modelResp.JSON200.Status == nil {
-				return "DEPLOYING"
+				m.lastStatus = "DEPLOYING"
+				return m.lastStatus
 			}
-			return *modelResp.JSON200.Status
+			m.lastStatus = *modelResp.JSON200.Status
+			return m.lastStatus
 		}
 	}
 	logger.Printf("Model API could not be extracted: %+v", resource)
@@ -406,6 +425,11 @@ func (m *ModelAPIStatusChecker) ExtractStatus(resource interface{}) string {
 // GetResourceType returns the resource type
 func (m *ModelAPIStatusChecker) GetResourceType() utils.ResourceType {
 	return "model_api"
+}
+
+// LastStatus returns the latest status observed while polling.
+func (m *ModelAPIStatusChecker) LastStatus() string {
+	return m.lastStatus
 }
 
 // convertToModelAPIModel converts an SDK model to a simple model API model

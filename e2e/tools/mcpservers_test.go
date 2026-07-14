@@ -14,7 +14,7 @@ func TestMCPServersTools(t *testing.T) {
 
 	// Generate random test names to avoid conflicts
 	testMCPServerName := e2e.GenerateRandomTestName("test-mcp")
-	testMCPServerMissingIntegration := e2e.GenerateRandomTestName("test-mcp-missing-integration")
+	testMCPServerNameOnly := e2e.GenerateRandomTestName("test-mcp-name-only")
 
 	t.Run("full_lifecycle_test", func(t *testing.T) {
 		t.Run("create_blaxel_search_mcp", func(t *testing.T) {
@@ -309,25 +309,20 @@ func TestMCPServersTools(t *testing.T) {
 			}
 		})
 
-		t.Run("create_mcp_server_missing_integration", func(t *testing.T) {
+		t.Run("create_mcp_server_name_only", func(t *testing.T) {
 			args := map[string]interface{}{
-				"name": testMCPServerMissingIntegration,
+				"name":              testMCPServerNameOnly,
+				"waitForCompletion": "false",
 			}
 
 			result, err := client.CallTool("create_mcp_server", args)
 			if err != nil {
 				t.Fatalf("Failed to call create_mcp_server: %v", err)
 			}
-
-			// Check for tool error in result
-			isError, errorMsg := e2e.CheckToolError(result)
-			if !isError {
-				t.Fatal("Expected error for missing integration parameters")
+			if isError, errorMsg := e2e.CheckToolError(result); isError {
+				t.Fatalf("Unexpected error for name-only MCP server create: %s", errorMsg)
 			}
-			if !strings.Contains(errorMsg, "must provide") && !strings.Contains(errorMsg, "integration") {
-				t.Errorf("Expected error about missing integration params, got: %s", errorMsg)
-			}
-			_, _ = client.CallTool("delete_mcp_server", map[string]interface{}{"name": testMCPServerMissingIntegration, "waitForCompletion": "false"})
+			_, _ = client.CallTool("delete_mcp_server", map[string]interface{}{"name": testMCPServerNameOnly, "waitForCompletion": "false"})
 		})
 
 		t.Run("create_mcp_server_both_integration_modes", func(t *testing.T) {

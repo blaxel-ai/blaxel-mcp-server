@@ -123,8 +123,11 @@ func (h *SDKHandler) DeleteJob(ctx context.Context, id string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to delete job: %w", err)
 	}
 
-	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return nil, fmt.Errorf("delete job failed with status %d", resp.StatusCode())
+	if resp.StatusCode() == http.StatusNotFound {
+		return nil, fmt.Errorf("job '%s' not found", id)
+	}
+	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("failed to delete job '%s': status %d", id, resp.StatusCode())
 	}
 
 	result := map[string]interface{}{

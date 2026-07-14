@@ -44,20 +44,14 @@ func resolveHandler(defaultHandler RuntimeHandler, cfg *config.Config, workspace
 }
 
 // RunAgent implements RuntimeHandler.RunAgent
-func (h *SDKHandler) RunAgent(ctx context.Context, name, message, agentContext string) (string, error) {
+func (h *SDKHandler) RunAgent(ctx context.Context, name, bodyStr, path string) (string, error) {
 	if h.blaxelClient == nil {
 		return "", fmt.Errorf("blaxel client not initialized")
 	}
 
-	// Prepare the request body for the agent
-	requestBody := map[string]interface{}{
-		"inputs": message,
-	}
-	if agentContext != "" {
-		var contextData interface{}
-		if err := json.Unmarshal([]byte(agentContext), &contextData); err == nil {
-			requestBody["context"] = contextData
-		}
+	var bodyData interface{}
+	if err := json.Unmarshal([]byte(bodyStr), &bodyData); err != nil {
+		bodyData = json.RawMessage(bodyStr)
 	}
 
 	resp, err := h.blaxelClient.RunWithMetadata(
@@ -66,8 +60,8 @@ func (h *SDKHandler) RunAgent(ctx context.Context, name, message, agentContext s
 		"agent",
 		name,
 		"POST",
-		"",
-		requestBody,
+		path,
+		bodyData,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to run agent: %w", err)

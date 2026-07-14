@@ -1,0 +1,10 @@
+{
+  "agent": {
+    "name": "mcp-live-request-echo-agent",
+    "delete_after_test": true
+  },
+  "job": {
+    "name": "mcp-live-parameter-echo-job",
+    "delete_after_test": true
+  }
+}

@@ -13,7 +13,7 @@ import (
 
 // RuntimeHandler defines the interface for runtime operations
 type RuntimeHandler interface {
-	RunAgent(ctx context.Context, name, message, context string) (string, error)
+	RunAgent(ctx context.Context, name, body, path string) (string, error)
 	RunJob(ctx context.Context, name, parameters string) (string, error)
 	RunModel(ctx context.Context, name, body, path, method string) (string, error)
 	RunSandbox(ctx context.Context, name, body, method, path string) (string, error)
@@ -75,7 +75,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	runAgentTool := mcp.NewTool("run_agent",
 		mcp.WithToolTitle("Run Agent"),
 		mcp.WithTitleAnnotation("Run Agent"),
-		mcp.WithDescription("Chat with or invoke an agent"),
+		mcp.WithDescription("Invoke a Blaxel agent with message shorthand or an arbitrary JSON body/path; see https://docs.blaxel.ai/Agents/Run-an-agent."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithIdempotentHintAnnotation(false),
@@ -85,11 +85,16 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			mcp.Description("Name of the agent to run"),
 		),
 		mcp.WithString("message",
-			mcp.Required(),
-			mcp.Description("Message or prompt to send to the agent"),
+			mcp.Description("Message or prompt shorthand to send to the agent; use either message or body"),
 		),
 		mcp.WithString("context",
-			mcp.Description("Optional context data for the agent (JSON string)"),
+			mcp.Description("Optional context data for message shorthand (JSON object string)"),
+		),
+		mcp.WithAny("body",
+			mcp.Description("Arbitrary JSON request body to send to the agent; use either body or message"),
+		),
+		mcp.WithString("path",
+			mcp.Description("Optional agent runtime path to invoke when using body"),
 		),
 		mcp.WithString("workspace",
 			mcp.Description("Optional workspace name to override the default workspace"),
@@ -106,14 +111,42 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			return mcp.NewToolResultError("agent name is required"), nil
 		}
 
-		message := request.GetString("message", "")
-		if message == "" {
-			return mcp.NewToolResultError("message is required"), nil
+		arguments := request.GetArguments()
+		_, hasMessage := arguments["message"]
+		_, hasBody := arguments["body"]
+		if hasMessage == hasBody {
+			return mcp.NewToolResultError("exactly one of message or body is required"), nil
 		}
 
-		agentContext := request.GetString("context", "")
+		message := request.GetString("message", "")
+		body, validBody, err := getJSONBodyArgument(request, "body")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		if hasMessage && message == "" {
+			return mcp.NewToolResultError("message must be a non-empty string"), nil
+		}
+		if hasBody && !validBody {
+			return mcp.NewToolResultError("body must not be empty"), nil
+		}
 
-		result, err := activeHandler.RunAgent(ctx, name, message, agentContext)
+		if hasMessage {
+			messageBody := map[string]interface{}{"input": message}
+			if agentContext := request.GetString("context", ""); agentContext != "" {
+				var contextData map[string]interface{}
+				if err := json.Unmarshal([]byte(agentContext), &contextData); err != nil || contextData == nil {
+					return mcp.NewToolResultError("context must be a JSON object"), nil
+				}
+				messageBody["context"] = contextData
+			}
+			bodyData, err := json.Marshal(messageBody)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to encode agent message body: %v", err)), nil
+			}
+			body = string(bodyData)
+		}
+
+		result, err := activeHandler.RunAgent(ctx, name, body, request.GetString("path", ""))
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}

@@ -254,12 +254,16 @@ func (h *SDKHandler) UpdateUserRole(ctx context.Context, email, role string) ([]
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
+	identifier, err := h.resolveWorkspaceUserIdentifier(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+
 	updateData := sdk.UpdateWorkspaceUserRoleJSONRequestBody{
 		Role: role,
 	}
 
-	// The API expects either sub or email as the identifier
-	resp, err := h.sdkClient.UpdateWorkspaceUserRoleWithResponse(ctx, email, updateData)
+	resp, err := h.sdkClient.UpdateWorkspaceUserRoleWithResponse(ctx, identifier, updateData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update user role: %w", err)
 	}
@@ -286,14 +290,46 @@ func (h *SDKHandler) UpdateUserRole(ctx context.Context, email, role string) ([]
 	return nil, fmt.Errorf("failed to update user role with status %d", resp.StatusCode())
 }
 
+func (h *SDKHandler) resolveWorkspaceUserIdentifier(ctx context.Context, email string) (string, error) {
+	users, err := h.sdkClient.ListWorkspaceUsersWithResponse(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to list workspace users: %w", err)
+	}
+	if users.JSON200 == nil {
+		return "", fmt.Errorf("failed to list workspace users with status %d", users.StatusCode())
+	}
+
+	for _, user := range *users.JSON200 {
+		if user.Email != nil && strings.EqualFold(*user.Email, email) {
+			// Accepted users are addressed by their stable subject. Pending
+			// invitations must remain addressable by email even when the list
+			// response includes a provisional subject that mutation endpoints do
+			// not recognize.
+			if user.Accepted != nil && *user.Accepted && user.Sub != nil && *user.Sub != "" {
+				return *user.Sub, nil
+			}
+			// The generated SDK leaves '+' literal in a path parameter, while the
+			// controlplane route requires it percent-encoded before its own decode.
+			// Pre-encode only '+'; the SDK then safely escapes the percent sign.
+			return strings.ReplaceAll(*user.Email, "+", "%2B"), nil
+		}
+	}
+
+	return "", fmt.Errorf("user with email '%s' not found in workspace", email)
+}
+
 // RemoveUser implements UserHandler.RemoveUser
 func (h *SDKHandler) RemoveUser(ctx context.Context, email string) ([]byte, error) {
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	// The API expects either sub or email as the identifier
-	resp, err := h.sdkClient.RemoveWorkspaceUserWithResponse(ctx, email)
+	identifier, err := h.resolveWorkspaceUserIdentifier(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := h.sdkClient.RemoveWorkspaceUserWithResponse(ctx, identifier)
 	if err != nil {
 		return nil, fmt.Errorf("failed to remove user: %w", err)
 	}

@@ -35,6 +35,10 @@ Thumbs.db
 # Environment files
 .env
 .env.local
+.env.live
+
+# Local live-acceptance fixture selection
+e2e/live/testdata/fixtures.json
 
 # Log files
 *.log

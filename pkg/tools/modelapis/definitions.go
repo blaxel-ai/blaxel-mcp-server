@@ -125,10 +125,10 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 				mcp.Description("Model identifier"),
 			),
 			mcp.WithString("endpoint",
-				mcp.Description("Optional endpoint URL"),
+				mcp.Description("Optional provider endpoint name"),
 			),
 			mcp.WithObject("config",
-				mcp.Description("Additional configuration"),
+				mcp.Description("Optional string configuration for a new inline integration"),
 			),
 			mcp.WithString("waitForCompletion",
 				mcp.Description("Whether to wait for the model API to reach a final status (true/false, default: true)"),
@@ -143,26 +143,28 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
 			}
-			name := request.GetString("name", "")
-			if name == "" {
+			type createModelAPIArguments struct {
+				Name                      string                 `json:"name"`
+				Model                     string                 `json:"model,omitempty"`
+				Endpoint                  string                 `json:"endpoint,omitempty"`
+				IntegrationConnectionName string                 `json:"integrationConnectionName,omitempty"`
+				Provider                  string                 `json:"provider,omitempty"`
+				APIKey                    string                 `json:"apiKey,omitempty"`
+				Config                    map[string]interface{} `json:"config,omitempty"`
+				WaitForCompletion         string                 `json:"waitForCompletion,omitempty"`
+			}
+			var args createModelAPIArguments
+			if err := request.BindArguments(&args); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid arguments: %v", err)), nil
+			}
+			if args.Name == "" {
 				return mcp.NewToolResultError("model API name is required"), nil
 			}
-
-			model := request.GetString("model", "")
-			endpoint := request.GetString("endpoint", "")
-			integrationConnectionName := request.GetString("integrationConnectionName", "")
-			provider := request.GetString("provider", "")
-			apiKey := request.GetString("apiKey", "")
-			waitForCompletion := request.GetString("waitForCompletion", "true")
-
-			// Handle config object
-			var config map[string]interface{}
-			if configStr := request.GetString("config", ""); configStr != "" {
-				// TODO: Parse config string to map if needed
-				config = make(map[string]interface{})
+			if args.WaitForCompletion == "" {
+				args.WaitForCompletion = "true"
 			}
 
-			result, err := activeHandler.CreateModelAPI(ctx, name, model, endpoint, integrationConnectionName, provider, apiKey, waitForCompletion, config)
+			result, err := activeHandler.CreateModelAPI(ctx, args.Name, args.Model, args.Endpoint, args.IntegrationConnectionName, args.Provider, args.APIKey, args.WaitForCompletion, args.Config)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

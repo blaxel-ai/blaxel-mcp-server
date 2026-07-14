@@ -170,9 +170,15 @@ func (h *SDKHandler) DeleteIntegration(ctx context.Context, name string) ([]byte
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	_, err := h.sdkClient.DeleteIntegrationConnectionWithResponse(ctx, name)
+	resp, err := h.sdkClient.DeleteIntegrationConnectionWithResponse(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete integration: %w", err)
+	}
+	if resp.StatusCode() == http.StatusNotFound {
+		return nil, fmt.Errorf("integration '%s' not found", name)
+	}
+	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("failed to delete integration '%s': status %d", name, resp.StatusCode())
 	}
 
 	result := map[string]interface{}{

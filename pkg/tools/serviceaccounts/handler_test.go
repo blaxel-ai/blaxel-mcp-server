@@ -11,6 +11,75 @@ import (
 	"github.com/blaxel-ai/toolkit/sdk"
 )
 
+func TestUpdateServiceAccountRenamesByClientID(t *testing.T) {
+	const clientID = "test-client-id"
+	const newName = "Renamed service account"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Fatalf("expected PUT request, got %s", r.Method)
+		}
+		if r.URL.Path != "/service_accounts/"+clientID {
+			t.Fatalf("expected service account path, got %s", r.URL.Path)
+		}
+
+		var requestBody map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+			t.Fatalf("failed to decode request body: %v", err)
+		}
+		if want := map[string]any{"name": newName}; !mapsEqual(requestBody, want) {
+			t.Fatalf("request body = %#v, want %#v", requestBody, want)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"client_id":"test-client-id","client_secret":"must-not-leak","name":"Renamed service account"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	handler, err := NewSDKHandler(&config.Config{
+		APIEndpoint: server.URL,
+		RunEndpoint: server.URL,
+		Workspace:   "test-workspace",
+		Credentials: sdk.Credentials{APIKey: "test-api-key"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create service account handler: %v", err)
+	}
+
+	result, err := handler.UpdateServiceAccount(context.Background(), clientID, newName)
+	if err != nil {
+		t.Fatalf("update service account failed: %v", err)
+	}
+
+	var decoded struct {
+		Success        bool           `json:"success"`
+		ServiceAccount map[string]any `json:"service_account"`
+	}
+	if err := json.Unmarshal(result, &decoded); err != nil {
+		t.Fatalf("failed to decode handler response: %v", err)
+	}
+	if !decoded.Success {
+		t.Fatal("expected success result")
+	}
+	wantAccount := map[string]any{"client_id": clientID, "name": newName}
+	if !mapsEqual(decoded.ServiceAccount, wantAccount) {
+		t.Fatalf("service account response = %#v, want %#v", decoded.ServiceAccount, wantAccount)
+	}
+}
+
+func mapsEqual(got, want map[string]any) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for key, wantValue := range want {
+		if got[key] != wantValue {
+			return false
+		}
+	}
+	return true
+}
+
 func TestCreateServiceAccountAcceptsCreatedResponse(t *testing.T) {
 	const accountName = "test-service-account"
 	const clientID = "test-client-id"
