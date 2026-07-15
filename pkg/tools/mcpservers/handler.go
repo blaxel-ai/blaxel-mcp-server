@@ -369,7 +369,8 @@ func (m *MCPServerStatusChecker) ExtractStatus(resource interface{}) string {
 			return m.lastStatus
 		}
 	}
-	return "DEPLOYING" // Default assumption
+	m.lastStatus = "DEPLOYING"
+	return m.lastStatus // Default assumption
 }
 
 // GetResourceType returns the resource type

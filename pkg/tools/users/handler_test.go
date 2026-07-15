@@ -58,6 +58,9 @@ func TestUpdateUserRoleUsesEmailForPendingUserWithProvisionalSub(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/users":
 			_, _ = w.Write([]byte(`[{"email":"pending+alias@example.com","accepted":false,"sub":"provisional-sub"}]`))
 		case r.Method == http.MethodPut && r.URL.Path == "/users/pending%2Balias@example.com":
+			if r.RequestURI != "/users/pending%252Balias@example.com" {
+				t.Fatalf("wire request URI = %q, want double-escaped plus for the route's second decode", r.RequestURI)
+			}
 			_, _ = w.Write([]byte(`{}`))
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
@@ -105,6 +108,9 @@ func TestRemoveUserUsesEmailForPendingUserWithProvisionalSub(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/users":
 			_, _ = w.Write([]byte(`[{"email":"pending+alias@example.com","accepted":false,"sub":"provisional-sub"}]`))
 		case r.Method == http.MethodDelete && r.URL.Path == "/users/pending%2Balias@example.com":
+			if r.RequestURI != "/users/pending%252Balias@example.com" {
+				t.Fatalf("wire request URI = %q, want double-escaped plus for the route's second decode", r.RequestURI)
+			}
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)

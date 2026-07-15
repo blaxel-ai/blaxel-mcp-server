@@ -171,6 +171,16 @@ func TestCreateMCPServerIntegrationModesStillWork(t *testing.T) {
 	}
 }
 
+func TestMCPServerStatusCheckerFallbackUpdatesLastStatus(t *testing.T) {
+	checker := &MCPServerStatusChecker{lastStatus: "FAILED"}
+	if got := checker.ExtractStatus(struct{}{}); got != "DEPLOYING" {
+		t.Fatalf("ExtractStatus() = %q, want DEPLOYING", got)
+	}
+	if got := checker.LastStatus(); got != "DEPLOYING" {
+		t.Fatalf("LastStatus() = %q, want fallback status DEPLOYING", got)
+	}
+}
+
 func newMCPServerTestHandler(t *testing.T, endpoint string) MCPServerHandler {
 	t.Helper()
 	handler, err := NewSDKHandler(&config.Config{

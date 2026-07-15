@@ -308,9 +308,10 @@ func (h *SDKHandler) resolveWorkspaceUserIdentifier(ctx context.Context, email s
 			if user.Accepted != nil && *user.Accepted && user.Sub != nil && *user.Sub != "" {
 				return *user.Sub, nil
 			}
-			// The generated SDK leaves '+' literal in a path parameter, while the
-			// controlplane route requires it percent-encoded before its own decode.
-			// Pre-encode only '+'; the SDK then safely escapes the percent sign.
+			// The generated SDK leaves '+' literal, while the controlplane route
+			// applies another URL decode that would treat it as a space. Pre-encode
+			// '+' so the SDK emits %252B on the wire; net/http decodes that to %2B
+			// and the route's decode finally restores the literal '+'.
 			return strings.ReplaceAll(*user.Email, "+", "%2B"), nil
 		}
 	}
