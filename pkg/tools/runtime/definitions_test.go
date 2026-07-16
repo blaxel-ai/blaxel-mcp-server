@@ -92,13 +92,13 @@ func TestBuildSandboxCommandBodyIncludesOptionalFields(t *testing.T) {
 	}
 }
 
-func TestRunAgentToolMapsMessageArgument(t *testing.T) {
+func TestRunAgentToolMapsMessageShorthandToExactBody(t *testing.T) {
 	mcpServer, handler := newRuntimeToolTestServer(t)
 
 	result := callRuntimeTool(t, mcpServer, "run_agent", map[string]any{
 		"name":    "fixture-agent",
 		"message": "hello from fixture",
-		"context": `{"trace":"local"}`,
+		"context": `{"trace":"local","nested":{"enabled":true}}`,
 	})
 	if result.IsError {
 		t.Fatalf("run_agent returned tool error: %s", toolResultText(result))
@@ -111,11 +111,99 @@ func TestRunAgentToolMapsMessageArgument(t *testing.T) {
 	if call.name != "fixture-agent" {
 		t.Fatalf("expected agent name fixture-agent, got %q", call.name)
 	}
-	if call.message != "hello from fixture" {
-		t.Fatalf("expected message to be forwarded unchanged, got %q", call.message)
+	var body map[string]any
+	if err := json.Unmarshal([]byte(call.body), &body); err != nil {
+		t.Fatalf("expected JSON body, got %q: %v", call.body, err)
 	}
-	if call.context != `{"trace":"local"}` {
-		t.Fatalf("expected context to be forwarded unchanged, got %q", call.context)
+	if len(body) != 2 || body["input"] != "hello from fixture" {
+		t.Fatalf("expected exact input/context body, got %#v", body)
+	}
+	contextData, ok := body["context"].(map[string]any)
+	if !ok || contextData["trace"] != "local" {
+		t.Fatalf("expected decoded context object, got %T %#v", body["context"], body["context"])
+	}
+	if call.path != "" {
+		t.Fatalf("expected default agent path, got %q", call.path)
+	}
+}
+
+func TestRunAgentToolForwardsArbitraryBodyAndPath(t *testing.T) {
+	mcpServer, handler := newRuntimeToolTestServer(t)
+	input := map[string]any{
+		"marker": "fixture",
+		"nested": map[string]any{"number": 42.0, "enabled": true},
+	}
+
+	result := callRuntimeTool(t, mcpServer, "run_agent", map[string]any{
+		"name": "fixture-agent",
+		"body": input,
+		"path": "/e2e/echo",
+	})
+	if result.IsError {
+		t.Fatalf("run_agent returned tool error: %s", toolResultText(result))
+	}
+	call := handler.agentCalls[0]
+	var body map[string]any
+	if err := json.Unmarshal([]byte(call.body), &body); err != nil {
+		t.Fatalf("expected JSON body, got %q: %v", call.body, err)
+	}
+	if fmt.Sprint(body) != fmt.Sprint(input) {
+		t.Fatalf("expected arbitrary body %#v, got %#v", input, body)
+	}
+	if call.path != "/e2e/echo" {
+		t.Fatalf("expected path /e2e/echo, got %q", call.path)
+	}
+}
+
+func TestRunAgentToolRequiresExactlyOneInputMode(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args map[string]any
+	}{
+		{name: "neither", args: map[string]any{"name": "fixture-agent"}},
+		{name: "both", args: map[string]any{"name": "fixture-agent", "message": "hello", "body": map[string]any{"raw": true}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			mcpServer, handler := newRuntimeToolTestServer(t)
+			result := callRuntimeTool(t, mcpServer, "run_agent", test.args)
+			if !result.IsError || !strings.Contains(toolResultText(result), "exactly one of message or body") {
+				t.Fatalf("expected input-mode error, got error=%v text=%q", result.IsError, toolResultText(result))
+			}
+			if len(handler.agentCalls) != 0 {
+				t.Fatalf("expected no agent call, got %d", len(handler.agentCalls))
+			}
+		})
+	}
+}
+
+func TestRunAgentToolRejectsInvalidContext(t *testing.T) {
+	for _, agentContext := range []string{`not-json`, `["not","an","object"]`} {
+		mcpServer, handler := newRuntimeToolTestServer(t)
+		result := callRuntimeTool(t, mcpServer, "run_agent", map[string]any{
+			"name": "fixture-agent", "message": "hello", "context": agentContext,
+		})
+		if !result.IsError || !strings.Contains(toolResultText(result), "context must be a JSON object") {
+			t.Fatalf("expected context error for %q, got error=%v text=%q", agentContext, result.IsError, toolResultText(result))
+		}
+		if len(handler.agentCalls) != 0 {
+			t.Fatalf("expected no agent call, got %d", len(handler.agentCalls))
+		}
+	}
+}
+
+func TestRunAgentSchemaSupportsBothInputModes(t *testing.T) {
+	mcpServer, _ := newRuntimeToolTestServer(t)
+	tool := mcpServer.GetTool("run_agent")
+	if tool == nil {
+		t.Fatal("expected run_agent tool")
+	}
+	for _, property := range []string{"name", "message", "context", "body", "path", "workspace"} {
+		if _, ok := tool.Tool.InputSchema.Properties[property]; !ok {
+			t.Errorf("expected run_agent schema property %q", property)
+		}
+	}
+	if len(tool.Tool.InputSchema.Required) != 1 || tool.Tool.InputSchema.Required[0] != "name" {
+		t.Fatalf("expected only name to be schema-required, got %v", tool.Tool.InputSchema.Required)
 	}
 }
 
@@ -199,10 +287,11 @@ func TestRunModelBodySchemaAllowsObjectOrString(t *testing.T) {
 	}
 }
 
-func TestSDKHandlerRunAgentSendsInputsPayload(t *testing.T) {
+func TestSDKHandlerRunAgentSendsBodyAndPathUnchanged(t *testing.T) {
 	handler, requests := newSDKHandlerCapture(t, "agent", "fixture-agent", "/runtime/agent")
+	body := `{"arbitrary":{"nested":true},"count":2}`
 
-	result, err := handler.RunAgent(context.Background(), "fixture-agent", "hello from fixture", `{"trace":"local"}`)
+	result, err := handler.RunAgent(context.Background(), "fixture-agent", body, "/e2e/echo")
 	if err != nil {
 		t.Fatalf("RunAgent returned error: %v", err)
 	}
@@ -214,26 +303,19 @@ func TestSDKHandlerRunAgentSendsInputsPayload(t *testing.T) {
 	if request.method != http.MethodPost {
 		t.Fatalf("expected POST runtime request, got %s", request.method)
 	}
-	if strings.TrimRight(request.path, "/") != "/runtime/agent" {
+	if request.path != "/runtime/agent/e2e/echo" {
 		t.Fatalf("expected runtime agent path, got %q", request.path)
 	}
 
-	var body map[string]any
-	if err := json.Unmarshal([]byte(request.body), &body); err != nil {
-		t.Fatalf("expected JSON body, got %q: %v", request.body, err)
+	var got, want any
+	if err := json.Unmarshal([]byte(request.body), &got); err != nil {
+		t.Fatalf("expected JSON request body, got %q: %v", request.body, err)
 	}
-	if body["inputs"] != "hello from fixture" {
-		t.Fatalf("expected inputs field to carry the message, got %v", body["inputs"])
+	if err := json.Unmarshal([]byte(body), &want); err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := body["message"]; ok {
-		t.Fatalf("agent runtime payload must use inputs, not message: %s", request.body)
-	}
-	contextData, ok := body["context"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected parsed context object, got %T %v", body["context"], body["context"])
-	}
-	if contextData["trace"] != "local" {
-		t.Fatalf("expected context.trace local, got %v", contextData["trace"])
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("expected body %#v, got %#v", want, got)
 	}
 }
 
@@ -298,12 +380,10 @@ func TestSDKHandlerRunModelSendsDecodedJSONBody(t *testing.T) {
 }
 
 type runtimeToolCall struct {
-	name    string
-	message string
-	context string
-	body    string
-	path    string
-	method  string
+	name   string
+	body   string
+	path   string
+	method string
 }
 
 type recordingRuntimeHandler struct {
@@ -311,8 +391,8 @@ type recordingRuntimeHandler struct {
 	modelCalls []runtimeToolCall
 }
 
-func (h *recordingRuntimeHandler) RunAgent(ctx context.Context, name, message, agentContext string) (string, error) {
-	h.agentCalls = append(h.agentCalls, runtimeToolCall{name: name, message: message, context: agentContext})
+func (h *recordingRuntimeHandler) RunAgent(ctx context.Context, name, body, path string) (string, error) {
+	h.agentCalls = append(h.agentCalls, runtimeToolCall{name: name, body: body, path: path})
 	return `{"ok":true}`, nil
 }
 

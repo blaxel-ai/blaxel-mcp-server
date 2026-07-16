@@ -209,9 +209,15 @@ func (h *SDKHandler) DeleteServiceAccount(ctx context.Context, clientID string) 
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	_, err := h.sdkClient.DeleteWorkspaceServiceAccountWithResponse(ctx, clientID)
+	resp, err := h.sdkClient.DeleteWorkspaceServiceAccountWithResponse(ctx, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete service account: %w", err)
+	}
+	if resp.StatusCode() == http.StatusNotFound {
+		return nil, fmt.Errorf("service account '%s' not found", clientID)
+	}
+	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("failed to delete service account '%s': status %d", clientID, resp.StatusCode())
 	}
 
 	result := map[string]interface{}{
@@ -228,15 +234,13 @@ func (h *SDKHandler) DeleteServiceAccount(ctx context.Context, clientID string) 
 }
 
 // UpdateServiceAccount implements ServiceAccountHandler.UpdateServiceAccount
-func (h *SDKHandler) UpdateServiceAccount(ctx context.Context, clientID, description string) ([]byte, error) {
+func (h *SDKHandler) UpdateServiceAccount(ctx context.Context, clientID, name string) ([]byte, error) {
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	// Build update request
-	updateData := sdk.UpdateWorkspaceServiceAccountJSONRequestBody{
-		Description: &description,
-	}
+	// Build the REST update request using the service account's actual name field.
+	updateData := sdk.UpdateWorkspaceServiceAccountJSONRequestBody{Name: &name}
 
 	// Update the service account
 	resp, err := h.sdkClient.UpdateWorkspaceServiceAccountWithResponse(ctx, clientID, updateData)
@@ -252,8 +256,8 @@ func (h *SDKHandler) UpdateServiceAccount(ctx context.Context, clientID, descrip
 		"success": true,
 		"message": fmt.Sprintf("Service account '%s' updated successfully", clientID),
 		"service_account": map[string]interface{}{
-			"clientId":    clientID,
-			"description": description,
+			"client_id": clientID,
+			"name":      name,
 		},
 	}
 

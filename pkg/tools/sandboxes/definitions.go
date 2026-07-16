@@ -3,7 +3,6 @@ package sandboxes
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -22,6 +21,15 @@ type SandboxHandler interface {
 type SandboxHandlerWithReadOnly interface {
 	SandboxHandler
 	IsReadOnly() bool
+}
+
+type createSandboxArguments struct {
+	Name      string   `json:"name"`
+	Image     string   `json:"image"`
+	Memory    *float64 `json:"memory"`
+	Ports     string   `json:"ports"`
+	Env       string   `json:"env"`
+	Workspace string   `json:"workspace"`
 }
 
 // RegisterSandboxTools registers sandbox tools with the given handler
@@ -106,7 +114,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 			mcp.WithTitleAnnotation("Create Sandbox"),
 			mcp.WithDescription("Create a new sandbox"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
@@ -116,8 +124,11 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 			mcp.WithString("image",
 				mcp.Description("Docker image to use for the sandbox"),
 			),
-			mcp.WithNumber("memory",
-				mcp.Description("Memory in MB (default: 512)"),
+			mcp.WithInteger("memory",
+				mcp.Description("Memory in MB (minimum: 1024, maximum: 262144, default: 1024)"),
+				mcp.Min(1024),
+				mcp.Max(262144),
+				mcp.DefaultNumber(1024),
 			),
 			mcp.WithString("ports", mcp.Description("Ports to expose from the sandbox, separated by commas (eg. 8080,8081)")),
 			mcp.WithString("env", mcp.Description("Environment variables to set in the sandbox, separated by commas (eg. FOO=bar,BAR=baz)")),
@@ -127,29 +138,39 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 		)
 
 		s.AddTool(createSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
-			}
-			// Extract parameters from request
-			name := request.GetString("name", "")
-			if name == "" {
-				return mcp.NewToolResultError("sandbox name is required"), nil
-			}
-
-			image := request.GetString("image", "")
-			ports := request.GetString("ports", "")
-			env := request.GetString("env", "")
-
-			// Handle memory parameter - try to get it as a number, default to 0
-			memory := 0.0
-			if memoryStr := request.GetString("memory", ""); memoryStr != "" {
-				if mem, err := strconv.ParseFloat(memoryStr, 64); err == nil {
-					memory = mem
+			// BindArguments serializes map arguments through JSON, which rejects
+			// non-finite floats before it can identify the offending field.
+			if rawMemory, ok := request.GetArguments()["memory"].(float64); ok {
+				if err := validateSandboxMemory(rawMemory); err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
 				}
 			}
 
-			result, err := activeHandler.CreateSandbox(ctx, name, image, memory, ports, env)
+			var args createSandboxArguments
+			if err := request.BindArguments(&args); err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("invalid create_sandbox arguments: %v", err)), nil
+			}
+			if args.Name == "" {
+				return mcp.NewToolResultError("sandbox name is required"), nil
+			}
+			if args.Memory != nil {
+				if err := validateSandboxMemory(*args.Memory); err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+			}
+			if _, err := parseSandboxPorts(args.Ports); err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+
+			activeHandler, err := resolveHandler(handler, cfg, args.Workspace)
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
+			memory := float64(0)
+			if args.Memory != nil {
+				memory = *args.Memory
+			}
+			result, err := activeHandler.CreateSandbox(ctx, args.Name, args.Image, memory, args.Ports, args.Env)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

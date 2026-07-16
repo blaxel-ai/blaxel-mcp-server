@@ -124,8 +124,11 @@ func (h *SDKAgentHandler) DeleteAgent(ctx context.Context, name string) ([]byte,
 		return nil, fmt.Errorf("failed to delete agent: %w", err)
 	}
 
-	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return nil, fmt.Errorf("delete agent failed with status %d", resp.StatusCode())
+	if resp.StatusCode() == http.StatusNotFound {
+		return nil, fmt.Errorf("agent '%s' not found", name)
+	}
+	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("failed to delete agent '%s': status %d", name, resp.StatusCode())
 	}
 
 	result := map[string]interface{}{

@@ -153,19 +153,20 @@ export BL_READ_ONLY="true"              # Run in read-only mode
 ### Model API Management
 - `list_model_apis` - List all model APIs
 - `get_model_api` - Get details of a specific model API
-- `create_model_api` - **Dual Mode!** Create a model API
-  - **Mode 1**: Provide `provider`, `apiKey` to create new integration automatically
-  - **Mode 2**: Provide `integrationConnectionName` to use existing integration
-  - Flexible approach for different use cases
+- `create_model_api` - Create a model API using exactly one integration mode
+  - **Inline mode**: provide `provider` and `apiKey`; optional string `config` is stored on the new integration
+  - **Existing mode**: provide `integrationConnectionName`; the runtime type is derived from that connection
+  - Optional `endpoint` sets the provider endpoint name (not a URL)
+  - The generated inline integration is independently managed and must be deleted separately when no longer needed
 - `delete_model_api` - Delete a model API
 
 ### MCP Server Management
 - `list_mcp_servers` - List all MCP servers (functions)
 - `get_mcp_server` - Get details of a specific MCP server
-- `create_mcp_server` - **Dual Mode!** Create an MCP server
-  - **Mode 1**: Provide `integrationType`, `secret`, `config` to create new integration
-  - **Mode 2**: Provide `integrationConnectionName` to use existing integration
-  - Flexible approach for different use cases
+- `create_mcp_server` - Create an MCP server; integrations are optional
+  - Provide only `name` to create without an integration
+  - Provide `integrationType`, `secret`, and `config` to create a new integration
+  - Or provide `integrationConnectionName` to use an existing integration
 - `delete_mcp_server` - Delete an MCP server
 
 ### Sandbox Management
@@ -264,8 +265,11 @@ Create a resource and its integration in a single tool call:
     "name": "my-gpt4-api",
     "provider": "openai",
     "apiKey": "sk-...",
+    "config": {
+      "organization": "my-org"
+    },
     "model": "gpt-4",
-    "endpoint": "https://api.openai.com/v1"  // optional
+    "endpoint": "my-gpt4-endpoint"
   }
 }
 ```
@@ -340,6 +344,19 @@ Add the following to your Cursor MCP settings:
   }
 }
 ```
+
+## Strict live acceptance tests
+
+`make test-e2e-live` builds and launches the standalone MCP binary and exercises
+a dedicated real Blaxel workspace through the official MCP client. Copy
+`.env.live.example` to `.env.live` and configure the repository-owned fixture
+manifest hook before a full run. The target is destructive, fail-closed, and
+never silently skips missing credentials, workspace isolation, lane-specific
+fixtures, acknowledgements, quota, or setup failures. Authentication uses only
+a reviewer-confirmed workspace API key plus workspace in process environment;
+it does not use WorkOS/browser OAuth or MFA and scans its isolated auth home to
+ensure no key is persisted. Focused lanes have separate Make targets and do not
+require unrelated fixtures. See [`e2e/README.md`](e2e/README.md).
 
 ## Development
 

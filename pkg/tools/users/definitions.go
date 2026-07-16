@@ -3,6 +3,7 @@ package users
 import (
 	"context"
 	"fmt"
+	"net/mail"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -129,6 +130,10 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 			email := request.GetString("email", "")
 			if email == "" {
 				return mcp.NewToolResultError("email is required"), nil
+			}
+			parsed, err := mail.ParseAddress(email)
+			if err != nil || parsed.Address != email {
+				return mcp.NewToolResultError("email must be a valid address"), nil
 			}
 
 			role := request.GetString("role", "")

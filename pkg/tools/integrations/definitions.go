@@ -105,7 +105,7 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 			mcp.WithTitleAnnotation("Create Integration"),
 			mcp.WithDescription("Create a new integration connection"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",

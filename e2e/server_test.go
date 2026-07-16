@@ -324,9 +324,6 @@ func toolNameRequiresReadOnlyHint(name string) bool {
 
 func toolNameRequiresDestructiveHint(name string) bool {
 	for _, exactName := range []string{
-		"create_integration",
-		"create_mcp_server",
-		"create_sandbox",
 		"update_service_account",
 		"update_workspace_user_role",
 	} {
@@ -353,7 +350,10 @@ func toolNameRequiresDestructiveHint(name string) bool {
 
 func toolNameRequiresAdditiveHint(name string) bool {
 	for _, exactName := range []string{
+		"create_integration",
+		"create_mcp_server",
 		"create_model_api",
+		"create_sandbox",
 		"create_service_account",
 		"invite_workspace_user",
 	} {

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
@@ -116,6 +114,16 @@ func (h *SDKHandler) CreateSandbox(ctx context.Context, name, image string, memo
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
+	// The binder validates explicit values and passes zero when memory is omitted.
+	if memory != 0 {
+		if err := validateSandboxMemory(memory); err != nil {
+			return nil, err
+		}
+	}
+	parsedPorts, err := parseSandboxPorts(ports)
+	if err != nil {
+		return nil, err
+	}
 
 	// Build sandbox request
 	sandboxData := sdk.CreateSandboxJSONRequestBody{
@@ -133,34 +141,22 @@ func (h *SDKHandler) CreateSandbox(ctx context.Context, name, image string, memo
 	}
 
 	// Add optional memory
-	if memory > 0 {
+	if memory != 0 {
 		mem := int(memory)
 		sandboxData.Spec.Runtime.Memory = &mem
 	}
 
 	// Add optional ports
-	if ports != "" {
+	if len(parsedPorts) > 0 {
 		defaultProtocol := "TCP"
-		portStrings := strings.Split(ports, ",")
-		portsList := make([]sdk.Port, 0, len(portStrings))
-		for _, portStr := range portStrings {
-			portStr = strings.TrimSpace(portStr)
-			if portStr == "" {
-				continue
-			}
-			intPort, err := strconv.Atoi(portStr)
-			if err != nil {
-				return nil, fmt.Errorf("invalid port '%s': %w", portStr, err)
-			}
-			portData := sdk.Port{
-				Target:   &intPort,
+		portsList := make([]sdk.Port, 0, len(parsedPorts))
+		for i := range parsedPorts {
+			portsList = append(portsList, sdk.Port{
+				Target:   &parsedPorts[i],
 				Protocol: &defaultProtocol,
-			}
-			portsList = append(portsList, portData)
+			})
 		}
-		if len(portsList) > 0 {
-			sandboxData.Spec.Runtime.Ports = &portsList
-		}
+		sandboxData.Spec.Runtime.Ports = &portsList
 	}
 
 	// Add optional environment variables
@@ -207,9 +203,15 @@ func (h *SDKHandler) DeleteSandbox(ctx context.Context, name string) ([]byte, er
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	_, err := h.sdkClient.DeleteSandboxWithResponse(ctx, name)
+	resp, err := h.sdkClient.DeleteSandboxWithResponse(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete sandbox: %w", err)
+	}
+	if resp.StatusCode() == http.StatusNotFound {
+		return nil, fmt.Errorf("sandbox '%s' not found", name)
+	}
+	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("failed to delete sandbox '%s': status %d", name, resp.StatusCode())
 	}
 
 	result := map[string]interface{}{

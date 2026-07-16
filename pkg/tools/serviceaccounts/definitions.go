@@ -15,7 +15,7 @@ type ServiceAccountHandler interface {
 	GetServiceAccount(ctx context.Context, clientID string) ([]byte, error)
 	CreateServiceAccount(ctx context.Context, name string) ([]byte, error)
 	DeleteServiceAccount(ctx context.Context, clientID string) ([]byte, error)
-	UpdateServiceAccount(ctx context.Context, clientID, description string) ([]byte, error)
+	UpdateServiceAccount(ctx context.Context, clientID, name string) ([]byte, error)
 }
 
 // ServiceAccountHandlerWithReadOnly extends ServiceAccountHandler with readonly capability
@@ -181,12 +181,13 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(true),
 			mcp.WithOpenWorldHintAnnotation(false),
-			mcp.WithString("name",
+			mcp.WithString("client_id",
 				mcp.Required(),
 				mcp.Description("Client ID of the service account to update"),
 			),
-			mcp.WithString("description",
-				mcp.Description("New description for the service account"),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("New name for the service account"),
 			),
 			mcp.WithString("workspace",
 				mcp.Description("Optional workspace name to override the default workspace"),
@@ -198,14 +199,16 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
 			}
-			clientID := request.GetString("name", "")
+			clientID := request.GetString("client_id", "")
 			if clientID == "" {
+				return mcp.NewToolResultError("client_id is required"), nil
+			}
+			name := request.GetString("name", "")
+			if name == "" {
 				return mcp.NewToolResultError("name is required"), nil
 			}
 
-			description := request.GetString("description", "")
-
-			result, err := activeHandler.UpdateServiceAccount(ctx, clientID, description)
+			result, err := activeHandler.UpdateServiceAccount(ctx, clientID, name)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
@@ -113,6 +114,10 @@ func (h *SDKHandler) GetMCPServer(ctx context.Context, name string) ([]byte, err
 
 // CreateMCPServer implements MCPServerHandler.CreateMCPServer
 func (h *SDKHandler) CreateMCPServer(ctx context.Context, name, integrationConnectionName, integrationType, waitForCompletion string, secret, config map[string]string) ([]byte, error) {
+	waitForCompletionBool, err := normalizeLifecycleWait(waitForCompletion)
+	if err != nil {
+		return nil, err
+	}
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -121,12 +126,10 @@ func (h *SDKHandler) CreateMCPServer(ctx context.Context, name, integrationConne
 	hasExisting := integrationConnectionName != ""
 	hasNewType := integrationType != ""
 
-	// Validate integration parameters
+	// Integrations are optional, but the two integration configuration modes are
+	// mutually exclusive when one is requested.
 	if hasExisting && hasNewType {
 		return nil, fmt.Errorf("specify either integrationConnectionName or integrationType, not both")
-	}
-	if !hasExisting && !hasNewType {
-		return nil, fmt.Errorf("must provide either integrationConnectionName to reference an existing integration or integrationType to create a new one")
 	}
 
 	// Build MCP server request
@@ -214,68 +217,46 @@ func (h *SDKHandler) CreateMCPServer(ctx context.Context, name, integrationConne
 		return nil, fmt.Errorf("failed to create MCP server with status %d", function.StatusCode())
 	}
 
-	// Check if we should wait for completion
-	waitForCompletionBool := true // default to true
-	if waitForCompletion != "" {
-		waitForCompletionBool = waitForCompletion == "true"
-	}
-
 	// Wait for the MCP server to reach a final status if requested
+	deploymentFinalStatus := ""
 	if waitForCompletionBool {
 		logger.Printf("Waiting for MCP server '%s' to deploy...", name)
 		checker := NewMCPServerStatusChecker(h.sdkClient)
 		err = utils.WaitForResourceStatus(ctx, name, checker)
+		deploymentFinalStatus = checker.LastStatus()
 		if err != nil {
-			// Even if status waiting fails, we still created the MCP server
-			// Return a warning but don't fail the entire operation
-			logger.Printf("Warning: MCP server created but status check failed: %v", err)
-			result := map[string]interface{}{
-				"success": true,
-				"message": fmt.Sprintf("MCP server '%s' created successfully (status check failed: %v)", name, err),
-				"mcp_server": map[string]interface{}{
-					"name": name,
-				},
-			}
-
-			// Add integration details to result
-			if integrationName != "" {
-				result["mcp_server"].(map[string]interface{})["integrationConnection"] = integrationName
-				if hasNewType {
-					result["message"] = fmt.Sprintf("MCP server '%s' created successfully with inline integration '%s' (status check failed: %v)", name, integrationName, err)
-					result["mcp_server"].(map[string]interface{})["integrationType"] = integrationType
-				}
-			}
-
-			jsonData, err := json.MarshalIndent(result, "", "  ")
-			if err != nil {
-				return nil, fmt.Errorf("failed to format response: %w", err)
-			}
-
-			return jsonData, nil
+			return nil, fmt.Errorf("MCP server '%s' status wait failed: %w", name, err)
+		}
+		if deploymentFinalStatus == "FAILED" {
+			return nil, fmt.Errorf("MCP server '%s' deployment reached terminal status FAILED", name)
 		}
 	} else {
 		logger.Printf("Skipping status wait for MCP server '%s'", name)
 	}
 
-	// MCP server successfully created (and deployed if we waited)
-	deploymentStatus := "created"
-	if waitForCompletionBool {
-		deploymentStatus = "created and deployed"
+	// MCP server successfully created (and reached a terminal state if we waited).
+	message := fmt.Sprintf("MCP server '%s' creation accepted", name)
+	switch deploymentFinalStatus {
+	case "DEPLOYED":
+		message = fmt.Sprintf("MCP server '%s' created and deployed successfully", name)
 	}
 
 	result := map[string]interface{}{
 		"success": true,
-		"message": fmt.Sprintf("MCP server '%s' %s successfully", name, deploymentStatus),
+		"message": message,
 		"mcp_server": map[string]interface{}{
 			"name": name,
 		},
+	}
+	if deploymentFinalStatus != "" {
+		result["mcp_server"].(map[string]interface{})["status"] = deploymentFinalStatus
 	}
 
 	// Add integration details to result
 	if integrationName != "" {
 		result["mcp_server"].(map[string]interface{})["integrationConnection"] = integrationName
 		if hasNewType {
-			result["message"] = fmt.Sprintf("MCP server '%s' %s successfully with inline integration '%s'", name, deploymentStatus, integrationName)
+			result["message"] = fmt.Sprintf("%s with inline integration '%s'", message, integrationName)
 			result["mcp_server"].(map[string]interface{})["integrationType"] = integrationType
 		}
 	}
@@ -290,42 +271,32 @@ func (h *SDKHandler) CreateMCPServer(ctx context.Context, name, integrationConne
 
 // DeleteMCPServer implements MCPServerHandler.DeleteMCPServer
 func (h *SDKHandler) DeleteMCPServer(ctx context.Context, name, waitForCompletion string) ([]byte, error) {
+	waitForCompletionBool, err := normalizeLifecycleWait(waitForCompletion)
+	if err != nil {
+		return nil, err
+	}
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
 	// Delete the MCP server
-	_, err := h.sdkClient.DeleteFunctionWithResponse(ctx, name)
+	resp, err := h.sdkClient.DeleteFunctionWithResponse(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to delete MCP server: %w", err)
 	}
-
-	// Check if we should wait for completion
-	waitForCompletionBool := true // default to true
-	if waitForCompletion != "" {
-		waitForCompletionBool = waitForCompletion == "true"
+	if resp.StatusCode() == http.StatusNotFound {
+		return nil, fmt.Errorf("MCP server '%s' not found", name)
+	}
+	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("failed to delete MCP server '%s': status %d", name, resp.StatusCode())
 	}
 
 	// Wait for the MCP server to be fully deleted if requested
 	if waitForCompletionBool {
 		logger.Printf("Waiting for MCP server '%s' to be fully deleted...", name)
 		checker := NewMCPServerStatusChecker(h.sdkClient)
-		err = utils.WaitForResourceDeletion(ctx, name, checker)
-		if err != nil {
-			// Even if deletion polling fails, we still initiated the deletion
-			// Return a warning but don't fail the entire operation
-			logger.Printf("Warning: MCP server deletion initiated but status check failed: %v", err)
-			result := map[string]interface{}{
-				"success": true,
-				"message": fmt.Sprintf("MCP server '%s' deletion initiated (status check failed: %v)", name, err),
-			}
-
-			jsonData, err := json.MarshalIndent(result, "", "  ")
-			if err != nil {
-				return nil, fmt.Errorf("failed to format response: %w", err)
-			}
-
-			return jsonData, nil
+		if err = utils.WaitForResourceDeletion(ctx, name, checker); err != nil {
+			return nil, fmt.Errorf("MCP server '%s' deletion wait failed: %w", name, err)
 		}
 	} else {
 		logger.Printf("Skipping deletion wait for MCP server '%s'", name)
@@ -350,6 +321,17 @@ func (h *SDKHandler) DeleteMCPServer(ctx context.Context, name, waitForCompletio
 	return jsonData, nil
 }
 
+func normalizeLifecycleWait(value string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("waitForCompletion must be true or false")
+	}
+}
+
 // IsReadOnly implements MCPServerHandlerWithReadOnly.IsReadOnly
 func (h *SDKHandler) IsReadOnly() bool {
 	return h.readOnly
@@ -357,7 +339,8 @@ func (h *SDKHandler) IsReadOnly() bool {
 
 // MCPServerStatusChecker implements StatusChecker for MCP servers
 type MCPServerStatusChecker struct {
-	sdkClient *sdk.ClientWithResponses
+	sdkClient  *sdk.ClientWithResponses
+	lastStatus string
 }
 
 // NewMCPServerStatusChecker creates a new MCP server status checker
@@ -367,7 +350,17 @@ func NewMCPServerStatusChecker(sdkClient *sdk.ClientWithResponses) *MCPServerSta
 
 // GetResource gets the MCP server resource
 func (m *MCPServerStatusChecker) GetResource(ctx context.Context, name string) (interface{}, error) {
-	return m.sdkClient.GetFunctionWithResponse(ctx, name)
+	resp, err := m.sdkClient.GetFunctionWithResponse(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() == http.StatusNotFound {
+		return nil, fmt.Errorf("MCP server '%s' not found (status 404)", name)
+	}
+	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("get MCP server '%s' failed with status %d", name, resp.StatusCode())
+	}
+	return resp, nil
 }
 
 // ExtractStatus extracts status from MCP server response
@@ -376,17 +369,25 @@ func (m *MCPServerStatusChecker) ExtractStatus(resource interface{}) string {
 	if functionResp, ok := resource.(*sdk.GetFunctionResponse); ok {
 		if functionResp.JSON200 != nil {
 			if functionResp.JSON200.Status == nil {
-				return "DEPLOYING"
+				m.lastStatus = "DEPLOYING"
+				return m.lastStatus
 			}
-			return *functionResp.JSON200.Status
+			m.lastStatus = *functionResp.JSON200.Status
+			return m.lastStatus
 		}
 	}
-	return "DEPLOYING" // Default assumption
+	m.lastStatus = "DEPLOYING"
+	return m.lastStatus // Default assumption
 }
 
 // GetResourceType returns the resource type
 func (m *MCPServerStatusChecker) GetResourceType() utils.ResourceType {
 	return "mcp_server"
+}
+
+// LastStatus returns the latest status observed while polling.
+func (m *MCPServerStatusChecker) LastStatus() string {
+	return m.lastStatus
 }
 
 // convertToFunctionModel converts an SDK function to a simple function model

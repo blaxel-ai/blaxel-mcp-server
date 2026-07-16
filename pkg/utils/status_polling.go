@@ -23,11 +23,8 @@ type StatusChecker interface {
 // the resource is no longer in a building/deploying state
 func isFinalStatus(status string) bool {
 	finalStatuses := []string{
-		"DEPLOYED",    // Successfully deployed
-		"FAILED",      // Failed to deploy
-		"TERMINATED",  // Terminated
-		"DEACTIVATED", // Deactivated
-		"DELETING",    // Being deleted
+		"DEPLOYED", // Successfully deployed
+		"FAILED",   // Failed to deploy
 	}
 
 	for _, finalStatus := range finalStatuses {
@@ -57,18 +54,36 @@ func isBuildingStatus(status string) bool {
 	return false
 }
 
+func waitForPollingRetry(ctx context.Context) error {
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // WaitForResourceStatus waits for a resource to reach a final status
 func WaitForResourceStatus(ctx context.Context, resourceName string, checker StatusChecker) error {
 	maxAttempts := 60 // 60 attempts with 2 second intervals = 120 seconds max
 	resourceType := checker.GetResourceType()
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		// Get the resource to check its status
 		resource, err := checker.GetResource(ctx, resourceName)
 		if err != nil {
 			logger.Printf("Failed to get %s status (attempt %d/%d): %v", resourceType, attempt, maxAttempts, err)
 			if attempt < maxAttempts {
-				time.Sleep(2 * time.Second)
+				if err := waitForPollingRetry(ctx); err != nil {
+					return err
+				}
 				continue
 			}
 			return fmt.Errorf("failed to get %s status after %d attempts: %w", resourceType, maxAttempts, err)
@@ -77,7 +92,9 @@ func WaitForResourceStatus(ctx context.Context, resourceName string, checker Sta
 		if resource == nil {
 			logger.Printf("%s not found (attempt %d/%d)", resourceType, attempt, maxAttempts)
 			if attempt < maxAttempts {
-				time.Sleep(2 * time.Second)
+				if err := waitForPollingRetry(ctx); err != nil {
+					return err
+				}
 				continue
 			}
 			return fmt.Errorf("%s not found after %d attempts", resourceType, maxAttempts)
@@ -98,14 +115,18 @@ func WaitForResourceStatus(ctx context.Context, resourceName string, checker Sta
 		} else if isBuildingStatus(status) {
 			logger.Printf("%s '%s' still building, status: %s", resourceType, resourceName, status)
 			if attempt < maxAttempts {
-				time.Sleep(2 * time.Second)
+				if err := waitForPollingRetry(ctx); err != nil {
+					return err
+				}
 				continue
 			}
 			return fmt.Errorf("%s '%s' did not reach final status within timeout, last status: %s", resourceType, resourceName, status)
 		} else {
 			logger.Printf("%s '%s' unknown status: %s", resourceType, resourceName, status)
 			if attempt < maxAttempts {
-				time.Sleep(2 * time.Second)
+				if err := waitForPollingRetry(ctx); err != nil {
+					return err
+				}
 				continue
 			}
 			return fmt.Errorf("%s '%s' unknown status after %d attempts: %s", resourceType, resourceName, maxAttempts, status)
@@ -121,6 +142,10 @@ func WaitForResourceDeletion(ctx context.Context, resourceName string, checker S
 	resourceType := checker.GetResourceType()
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		// Get the resource to check its status
 		resource, err := checker.GetResource(ctx, resourceName)
 		if err != nil {
@@ -131,7 +156,9 @@ func WaitForResourceDeletion(ctx context.Context, resourceName string, checker S
 			}
 			logger.Printf("Failed to get %s status during deletion (attempt %d/%d): %v", resourceType, attempt, maxAttempts, err)
 			if attempt < maxAttempts {
-				time.Sleep(2 * time.Second)
+				if err := waitForPollingRetry(ctx); err != nil {
+					return err
+				}
 				continue
 			}
 			return fmt.Errorf("failed to get %s status during deletion after %d attempts: %w", resourceType, maxAttempts, err)
@@ -147,20 +174,16 @@ func WaitForResourceDeletion(ctx context.Context, resourceName string, checker S
 
 		logger.Printf("%s '%s' deletion status check attempt %d/%d: %s", resourceType, resourceName, attempt, maxAttempts, status)
 
-		if status == "DELETING" {
-			logger.Printf("%s '%s' still being deleted, status: %s", resourceType, resourceName, status)
-			if attempt < maxAttempts {
-				time.Sleep(2 * time.Second)
-				continue
+		// A status, including DELETED, still means the GET endpoint can resolve
+		// the resource. Keep polling until GET returns actionable not-found.
+		logger.Printf("%s '%s' still exists during deletion, status: %s", resourceType, resourceName, status)
+		if attempt < maxAttempts {
+			if err := waitForPollingRetry(ctx); err != nil {
+				return err
 			}
-			return fmt.Errorf("%s '%s' still in deleting state after %d attempts", resourceType, resourceName, maxAttempts)
-		} else if status == "DELETED" {
-			logger.Printf("%s '%s' successfully deleted", resourceType, resourceName)
-			return nil
-		} else {
-			// If the resource is in any other state, it's an error
-			return fmt.Errorf("%s '%s' is in unexpected state '%s' during deletion", resourceType, resourceName, status)
+			continue
 		}
+		return fmt.Errorf("%s '%s' still exists after %d deletion attempts, last status: %s", resourceType, resourceName, maxAttempts, status)
 	}
 
 	return fmt.Errorf("%s '%s' deletion check timed out after %d attempts", resourceType, resourceName, maxAttempts)

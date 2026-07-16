@@ -18,6 +18,10 @@ type Config struct {
 	// Server configuration
 	ReadOnly bool
 	Debug    bool
+	// AsyncLifecycleOnly restricts lifecycle tools to short asynchronous calls.
+	// Hosted transports with bounded request timeouts enable this mode; the
+	// standalone server retains synchronous waitForCompletion support.
+	AsyncLifecycleOnly bool
 }
 
 // Load loads configuration from environment variables
