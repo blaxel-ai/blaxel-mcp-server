@@ -11,19 +11,20 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-func TestCreateSandboxToolRejectsNegativeMemoryWithoutCallingHandler(t *testing.T) {
-	mcpServer, handler := newCreateSandboxToolTestServer()
+func TestCreateSandboxToolRejectsOutOfRangeAndFractionalMemoryWithoutCallingHandler(t *testing.T) {
+	for _, memory := range []any{-100, 1023, 262145, 1024.5} {
+		mcpServer, handler := newCreateSandboxToolTestServer()
+		result := callCreateSandboxTool(t, mcpServer, map[string]any{
+			"name":   "invalid-memory",
+			"memory": memory,
+		})
 
-	result := callCreateSandboxTool(t, mcpServer, map[string]any{
-		"name":   "invalid-memory",
-		"memory": -100,
-	})
-
-	if !result.IsError || !strings.Contains(strings.ToLower(toolResultText(result)), "memory") {
-		t.Fatalf("expected actionable memory error, got error=%v text=%q", result.IsError, toolResultText(result))
-	}
-	if len(handler.createCalls) != 0 {
-		t.Fatalf("expected no create call, got %d", len(handler.createCalls))
+		if !result.IsError || !strings.Contains(strings.ToLower(toolResultText(result)), "memory") {
+			t.Fatalf("expected actionable memory error for %v, got error=%v text=%q", memory, result.IsError, toolResultText(result))
+		}
+		if len(handler.createCalls) != 0 {
+			t.Fatalf("expected no create call for %v, got %d", memory, len(handler.createCalls))
+		}
 	}
 }
 
@@ -104,7 +105,8 @@ func TestCreateSandboxToolAllowsOmittedMemoryAndValidValues(t *testing.T) {
 		wantPorts  string
 	}{
 		{name: "omitted memory", args: map[string]any{"name": "default-memory"}},
-		{name: "valid memory and ports", args: map[string]any{"name": "valid", "memory": 1024, "ports": "8080, 65535"}, wantMemory: 1024, wantPorts: "8080, 65535"},
+		{name: "minimum memory and ports", args: map[string]any{"name": "minimum", "memory": 1024, "ports": "8080, 65535"}, wantMemory: 1024, wantPorts: "8080, 65535"},
+		{name: "maximum memory", args: map[string]any{"name": "maximum", "memory": 262144}, wantMemory: 262144},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			mcpServer, handler := newCreateSandboxToolTestServer()
@@ -123,6 +125,14 @@ func TestCreateSandboxToolAllowsOmittedMemoryAndValidValues(t *testing.T) {
 				t.Fatalf("create call ports = %q, want %q", got.ports, test.wantPorts)
 			}
 		})
+	}
+}
+
+func TestCreateSandboxMemorySchemaMatchesUniversalPlatformContract(t *testing.T) {
+	mcpServer, _ := newCreateSandboxToolTestServer()
+	property := mcpServer.GetTool("create_sandbox").Tool.InputSchema.Properties["memory"].(map[string]any)
+	if property["type"] != "integer" || property["minimum"] != 1024 || property["maximum"] != 262144 || property["default"] != 1024 {
+		t.Fatalf("memory schema type/minimum/maximum/default = %#v/%#v/%#v/%#v, want integer/1024/262144/1024", property["type"], property["minimum"], property["maximum"], property["default"])
 	}
 }
 

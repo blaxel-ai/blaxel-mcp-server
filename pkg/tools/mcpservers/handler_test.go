@@ -13,6 +13,47 @@ import (
 	"github.com/blaxel-ai/toolkit/sdk"
 )
 
+func TestMCPServerExplicitFalseIsAsyncAndReportsAcceptedLifecycle(t *testing.T) {
+	const name = "async-mcp"
+	var creates, deletes, gets atomic.Int32
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method {
+		case http.MethodPost:
+			creates.Add(1)
+			_, _ = w.Write([]byte(`{"metadata":{"name":"async-mcp"},"status":"DEPLOYING"}`))
+		case http.MethodDelete:
+			deletes.Add(1)
+			w.WriteHeader(http.StatusNoContent)
+		case http.MethodGet:
+			gets.Add(1)
+			t.Fatalf("omitted wait unexpectedly polled %s", r.URL.Path)
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(api.Close)
+
+	handler := newMCPServerTestHandler(t, api.URL)
+	created, err := handler.CreateMCPServer(context.Background(), name, "", "", " FaLsE ", nil, nil)
+	if err != nil {
+		t.Fatalf("async create: %v", err)
+	}
+	if !strings.Contains(string(created), "creation accepted") || strings.Contains(string(created), "created successfully") {
+		t.Fatalf("async create message is inaccurate: %s", created)
+	}
+	deleted, err := handler.DeleteMCPServer(context.Background(), name, " FaLsE ")
+	if err != nil {
+		t.Fatalf("async delete: %v", err)
+	}
+	if !strings.Contains(string(deleted), "deletion initiated") || strings.Contains(string(deleted), "deleted successfully") {
+		t.Fatalf("async delete message is inaccurate: %s", deleted)
+	}
+	if creates.Load() != 1 || deletes.Load() != 1 || gets.Load() != 0 {
+		t.Fatalf("request counts create/delete/get = %d/%d/%d, want 1/1/0", creates.Load(), deletes.Load(), gets.Load())
+	}
+}
+
 func TestCreateMCPServerNameOnlyWaitsForTerminalStatus(t *testing.T) {
 	const name = "name-only-mcp"
 	var getCount atomic.Int32
@@ -45,9 +86,9 @@ func TestCreateMCPServerNameOnlyWaitsForTerminalStatus(t *testing.T) {
 	t.Cleanup(api.Close)
 
 	handler := newMCPServerTestHandler(t, api.URL)
-	result, err := handler.CreateMCPServer(context.Background(), name, "", "", "true", nil, nil)
+	result, err := handler.CreateMCPServer(context.Background(), name, "", "", "", nil, nil)
 	if err != nil {
-		t.Fatalf("name-only create: %v", err)
+		t.Fatalf("name-only create with omitted wait: %v", err)
 	}
 	if !strings.Contains(string(result), name) {
 		t.Fatalf("create result does not identify server: %s", result)
@@ -57,7 +98,7 @@ func TestCreateMCPServerNameOnlyWaitsForTerminalStatus(t *testing.T) {
 	}
 }
 
-func TestCreateMCPServerWaitReturnsAfterFailedStatus(t *testing.T) {
+func TestCreateMCPServerWaitReturnsErrorAfterFailedStatus(t *testing.T) {
 	const name = "failed-mcp"
 	var getCount atomic.Int32
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -76,11 +117,11 @@ func TestCreateMCPServerWaitReturnsAfterFailedStatus(t *testing.T) {
 
 	handler := newMCPServerTestHandler(t, api.URL)
 	result, err := handler.CreateMCPServer(context.Background(), name, "", "", "true", nil, nil)
-	if err != nil {
-		t.Fatalf("create ending in FAILED should complete the wait: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "FAILED") {
+		t.Fatalf("create ending in FAILED error = %v, want FAILED deployment error", err)
 	}
-	if !strings.Contains(string(result), `"status": "FAILED"`) {
-		t.Fatalf("create result does not report terminal FAILED status: %s", result)
+	if result != nil {
+		t.Fatalf("create ending in FAILED result = %s, want nil", result)
 	}
 	if got := getCount.Load(); got != 1 {
 		t.Fatalf("status GET count = %d, want 1", got)
@@ -113,6 +154,25 @@ func TestDeleteMCPServerWaitsForNotFound(t *testing.T) {
 	}
 	if got := getCount.Load(); got != 2 {
 		t.Fatalf("status GET count = %d, want 2 (DELETING then not-found)", got)
+	}
+}
+
+func TestMCPServerHandlerRejectsInvalidWaitBeforeMutation(t *testing.T) {
+	var requests atomic.Int32
+	api := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests.Add(1)
+	}))
+	t.Cleanup(api.Close)
+	handler := newMCPServerTestHandler(t, api.URL)
+
+	if _, err := handler.CreateMCPServer(context.Background(), "invalid-wait", "", "", "eventually", nil, nil); err == nil || !strings.Contains(err.Error(), "true or false") {
+		t.Fatalf("invalid create wait error = %v", err)
+	}
+	if _, err := handler.DeleteMCPServer(context.Background(), "invalid-wait", "eventually"); err == nil || !strings.Contains(err.Error(), "true or false") {
+		t.Fatalf("invalid delete wait error = %v", err)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("invalid waits made %d API requests, want 0", requests.Load())
 	}
 }
 

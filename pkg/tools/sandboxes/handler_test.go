@@ -16,7 +16,7 @@ import (
 func TestSDKHandlerRejectsInvalidMemoryBeforeAPIRequest(t *testing.T) {
 	// Explicit zero is rejected by the MCP binder; zero at this compatibility
 	// interface means the optional field was omitted.
-	for _, memory := range []float64{-100, 999999999999, math.NaN(), math.Inf(1), math.Inf(-1)} {
+	for _, memory := range []float64{-100, 1023, 262145, 1024.5, 999999999999, math.NaN(), math.Inf(1), math.Inf(-1)} {
 		handler, requestCount := newCreateSandboxHandlerTestServer(t)
 
 		_, err := handler.CreateSandbox(context.Background(), "invalid-memory", "", memory, "", "")
@@ -54,15 +54,15 @@ func TestSDKHandlerAllowsOmittedMemory(t *testing.T) {
 	}
 }
 
-func TestSDKHandlerAllowsValidMemoryAndPorts(t *testing.T) {
-	handler, requestCount := newCreateSandboxHandlerTestServer(t)
-
-	memory := 1024.0
-	if _, err := handler.CreateSandbox(context.Background(), "valid", "", memory, "8080,65535", ""); err != nil {
-		t.Fatalf("expected valid sandbox input to reach API: %v", err)
-	}
-	if got := requestCount.Load(); got != 1 {
-		t.Fatalf("expected one API request, got %d", got)
+func TestSDKHandlerAllowsMemoryBoundariesAndValidPorts(t *testing.T) {
+	for _, memory := range []float64{1024, 262144} {
+		handler, requestCount := newCreateSandboxHandlerTestServer(t)
+		if _, err := handler.CreateSandbox(context.Background(), "valid", "", memory, "8080,65535", ""); err != nil {
+			t.Fatalf("expected memory %v to reach API: %v", memory, err)
+		}
+		if got := requestCount.Load(); got != 1 {
+			t.Fatalf("memory %v made %d API requests, want 1", memory, got)
+		}
 	}
 }
 

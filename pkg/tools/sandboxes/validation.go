@@ -8,11 +8,11 @@ import (
 )
 
 func validateSandboxMemory(memory float64) error {
-	if memory <= 0 || math.IsNaN(memory) || math.IsInf(memory, 0) {
-		return fmt.Errorf("memory must be a positive finite number of MB")
+	if math.IsNaN(memory) || math.IsInf(memory, 0) || math.Trunc(memory) != memory {
+		return fmt.Errorf("memory must be a whole finite integer between 1024 and 262144 MB")
 	}
-	if memory > math.MaxInt32 || math.Trunc(memory) != memory {
-		return fmt.Errorf("memory must be a whole number of MB representable as a 32-bit integer")
+	if memory < 1024 || memory > 262144 {
+		return fmt.Errorf("memory must be between 1024 and 262144 MB")
 	}
 	return nil
 }

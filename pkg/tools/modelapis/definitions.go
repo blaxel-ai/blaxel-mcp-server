@@ -3,6 +3,7 @@ package modelapis
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -130,19 +131,17 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 			mcp.WithObject("config",
 				mcp.Description("Optional string configuration for a new inline integration"),
 			),
-			mcp.WithString("waitForCompletion",
-				mcp.Description("Whether to wait for the model API to reach a final status (true/false, default: true)"),
-			),
+			mcp.WithString("waitForCompletion", modelAPILifecycleWaitOptions(
+				cfg,
+				"Async-only calls do not wait. Use false or omit this field, then poll get_model_api until status is DEPLOYED or FAILED.",
+				"Whether to wait for the model API to reach DEPLOYED or FAILED (true/false, default: true).",
+			)...),
 			mcp.WithString("workspace",
 				mcp.Description("Optional workspace name to override the default workspace"),
 			),
 		)
 
 		s.AddTool(createModelAPITool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
-			}
 			type createModelAPIArguments struct {
 				Name                      string                 `json:"name"`
 				Model                     string                 `json:"model,omitempty"`
@@ -160,10 +159,20 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 			if args.Name == "" {
 				return mcp.NewToolResultError("model API name is required"), nil
 			}
-			if args.WaitForCompletion == "" {
+			if cfg.AsyncLifecycleOnly {
+				normalizedWait, err := normalizeAsyncModelAPIWait(args.WaitForCompletion, "creation", "until status is DEPLOYED or FAILED")
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+				args.WaitForCompletion = normalizedWait
+			} else if strings.TrimSpace(args.WaitForCompletion) == "" {
 				args.WaitForCompletion = "true"
 			}
 
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			result, err := activeHandler.CreateModelAPI(ctx, args.Name, args.Model, args.Endpoint, args.IntegrationConnectionName, args.Provider, args.APIKey, args.WaitForCompletion, args.Config)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
@@ -185,26 +194,39 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 				mcp.Required(),
 				mcp.Description("Name of the model API to delete"),
 			),
-			mcp.WithString("waitForCompletion",
-				mcp.Description("Whether to wait for the model API to be fully deleted (true/false, default: true)"),
-			),
+			mcp.WithString("waitForCompletion", modelAPILifecycleWaitOptions(
+				cfg,
+				"Async-only calls do not wait. Use false or omit this field, then poll get_model_api until the model API is not found.",
+				"Whether to wait for the model API to be fully deleted (true/false, default: true).",
+			)...),
 			mcp.WithString("workspace",
 				mcp.Description("Optional workspace name to override the default workspace"),
 			),
 		)
 
 		s.AddTool(deleteModelAPITool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
-			}
 			name := request.GetString("name", "")
 			if name == "" {
 				return mcp.NewToolResultError("model API name is required"), nil
 			}
 
-			waitForCompletion := request.GetString("waitForCompletion", "true")
+			defaultWait := "true"
+			if cfg.AsyncLifecycleOnly {
+				defaultWait = "false"
+			}
+			waitForCompletion := request.GetString("waitForCompletion", defaultWait)
+			if cfg.AsyncLifecycleOnly {
+				normalizedWait, err := normalizeAsyncModelAPIWait(waitForCompletion, "deletion", "until the model API is not found")
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+				waitForCompletion = normalizedWait
+			}
 
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
+			if err != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
+			}
 			result, err := activeHandler.DeleteModelAPI(ctx, name, waitForCompletion)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
@@ -212,5 +234,23 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 
 			return mcp.NewToolResultText(string(result)), nil
 		})
+	}
+}
+
+func modelAPILifecycleWaitOptions(cfg *config.Config, asyncDescription, standaloneDescription string) []mcp.PropertyOption {
+	if cfg.AsyncLifecycleOnly {
+		return []mcp.PropertyOption{mcp.Description(asyncDescription), mcp.Enum("false"), mcp.DefaultString("false")}
+	}
+	return []mcp.PropertyOption{mcp.Description(standaloneDescription), mcp.Enum("true", "false"), mcp.DefaultString("true")}
+}
+
+func normalizeAsyncModelAPIWait(value, operation, pollCondition string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "false":
+		return "false", nil
+	case "true":
+		return "", fmt.Errorf("waitForCompletion=true is not supported for async-only model API %s because the request may outlive the call. Use false or omit waitForCompletion, then poll get_model_api %s", operation, pollCondition)
+	default:
+		return "", fmt.Errorf("waitForCompletion must be false or omitted for async-only model API %s. Use false or omit waitForCompletion, then poll get_model_api %s", operation, pollCondition)
 	}
 }

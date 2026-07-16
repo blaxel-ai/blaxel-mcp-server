@@ -13,6 +13,49 @@ import (
 	"github.com/blaxel-ai/toolkit/sdk"
 )
 
+func TestModelAPIExplicitFalseIsAsyncAndReportsAcceptedLifecycle(t *testing.T) {
+	const name = "async-model"
+	var creates, deletes, statusGets atomic.Int32
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/integrations/connections/existing-openai":
+			_, _ = w.Write([]byte(`{"metadata":{"name":"existing-openai"},"spec":{"integration":"openai"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/models":
+			creates.Add(1)
+			_, _ = w.Write([]byte(`{"metadata":{"name":"async-model"},"status":"DEPLOYING"}`))
+		case r.Method == http.MethodDelete && r.URL.Path == "/models/"+name:
+			deletes.Add(1)
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && r.URL.Path == "/models/"+name:
+			statusGets.Add(1)
+			t.Fatalf("omitted wait unexpectedly polled %s", r.URL.Path)
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(api.Close)
+
+	handler := newModelAPITestHandler(t, api.URL)
+	created, err := handler.CreateModelAPI(context.Background(), name, "gpt-4o", "", "existing-openai", "", "", " FaLsE ", nil)
+	if err != nil {
+		t.Fatalf("async create: %v", err)
+	}
+	if !strings.Contains(string(created), "creation accepted") || strings.Contains(string(created), "created successfully") {
+		t.Fatalf("async create message is inaccurate: %s", created)
+	}
+	deleted, err := handler.DeleteModelAPI(context.Background(), name, " FaLsE ")
+	if err != nil {
+		t.Fatalf("async delete: %v", err)
+	}
+	if !strings.Contains(string(deleted), "deletion initiated") || strings.Contains(string(deleted), "deleted successfully") {
+		t.Fatalf("async delete message is inaccurate: %s", deleted)
+	}
+	if creates.Load() != 1 || deletes.Load() != 1 || statusGets.Load() != 0 {
+		t.Fatalf("request counts create/delete/status-get = %d/%d/%d, want 1/1/0", creates.Load(), deletes.Load(), statusGets.Load())
+	}
+}
+
 func TestCreateModelAPIWaitsForTerminalStatus(t *testing.T) {
 	const name = "waiting-model"
 	var getCount atomic.Int32
@@ -36,9 +79,9 @@ func TestCreateModelAPIWaitsForTerminalStatus(t *testing.T) {
 	t.Cleanup(api.Close)
 
 	handler := newModelAPITestHandler(t, api.URL)
-	result, err := handler.CreateModelAPI(context.Background(), name, "gpt-4o", "", "existing-openai", "", "", "true", nil)
+	result, err := handler.CreateModelAPI(context.Background(), name, "gpt-4o", "", "existing-openai", "", "", "", nil)
 	if err != nil {
-		t.Fatalf("create with wait: %v", err)
+		t.Fatalf("create with omitted wait: %v", err)
 	}
 	if !strings.Contains(string(result), `"status": "DEPLOYED"`) {
 		t.Fatalf("create result does not report terminal status: %s", result)
@@ -48,7 +91,7 @@ func TestCreateModelAPIWaitsForTerminalStatus(t *testing.T) {
 	}
 }
 
-func TestCreateModelAPIWaitReturnsAfterFailedStatus(t *testing.T) {
+func TestCreateModelAPIWaitReturnsErrorAfterFailedStatus(t *testing.T) {
 	const name = "failed-model"
 	var getCount atomic.Int32
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,11 +112,11 @@ func TestCreateModelAPIWaitReturnsAfterFailedStatus(t *testing.T) {
 
 	handler := newModelAPITestHandler(t, api.URL)
 	result, err := handler.CreateModelAPI(context.Background(), name, "gpt-4o", "", "existing-openai", "", "", "true", nil)
-	if err != nil {
-		t.Fatalf("create ending in FAILED should complete the wait: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "FAILED") {
+		t.Fatalf("create ending in FAILED error = %v, want FAILED deployment error", err)
 	}
-	if !strings.Contains(string(result), `"status": "FAILED"`) {
-		t.Fatalf("create result does not report terminal FAILED status: %s", result)
+	if result != nil {
+		t.Fatalf("create ending in FAILED result = %s, want nil", result)
 	}
 	if got := getCount.Load(); got != 1 {
 		t.Fatalf("status GET count = %d, want 1", got)
@@ -125,6 +168,25 @@ func TestDeleteModelAPIWaitsForNotFound(t *testing.T) {
 	}
 	if got := getCount.Load(); got != 2 {
 		t.Fatalf("status GET count = %d, want 2 (DELETING then not-found)", got)
+	}
+}
+
+func TestModelAPIHandlerRejectsInvalidWaitBeforeMutation(t *testing.T) {
+	var requests atomic.Int32
+	api := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		requests.Add(1)
+	}))
+	t.Cleanup(api.Close)
+	handler := newModelAPITestHandler(t, api.URL)
+
+	if _, err := handler.CreateModelAPI(context.Background(), "invalid-wait", "gpt-4o", "", "existing-openai", "", "", "eventually", nil); err == nil || !strings.Contains(err.Error(), "true or false") {
+		t.Fatalf("invalid create wait error = %v", err)
+	}
+	if _, err := handler.DeleteModelAPI(context.Background(), "invalid-wait", "eventually"); err == nil || !strings.Contains(err.Error(), "true or false") {
+		t.Fatalf("invalid delete wait error = %v", err)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("invalid waits made %d API requests, want 0", requests.Load())
 	}
 }
 

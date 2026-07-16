@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
@@ -113,6 +114,10 @@ func (h *SDKHandler) GetMCPServer(ctx context.Context, name string) ([]byte, err
 
 // CreateMCPServer implements MCPServerHandler.CreateMCPServer
 func (h *SDKHandler) CreateMCPServer(ctx context.Context, name, integrationConnectionName, integrationType, waitForCompletion string, secret, config map[string]string) ([]byte, error) {
+	waitForCompletionBool, err := normalizeLifecycleWait(waitForCompletion)
+	if err != nil {
+		return nil, err
+	}
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -212,35 +217,28 @@ func (h *SDKHandler) CreateMCPServer(ctx context.Context, name, integrationConne
 		return nil, fmt.Errorf("failed to create MCP server with status %d", function.StatusCode())
 	}
 
-	// Check if we should wait for completion
-	waitForCompletionBool := true // default to true
-	if waitForCompletion != "" {
-		waitForCompletionBool = waitForCompletion == "true"
-	}
-
 	// Wait for the MCP server to reach a final status if requested
 	deploymentFinalStatus := ""
 	if waitForCompletionBool {
 		logger.Printf("Waiting for MCP server '%s' to deploy...", name)
 		checker := NewMCPServerStatusChecker(h.sdkClient)
 		err = utils.WaitForResourceStatus(ctx, name, checker)
-		// FAILED is a terminal deployment result, so the wait is complete even
-		// though the generic status helper reports it as an unsuccessful deploy.
 		deploymentFinalStatus = checker.LastStatus()
-		if err != nil && deploymentFinalStatus != "FAILED" {
+		if err != nil {
 			return nil, fmt.Errorf("MCP server '%s' status wait failed: %w", name, err)
+		}
+		if deploymentFinalStatus == "FAILED" {
+			return nil, fmt.Errorf("MCP server '%s' deployment reached terminal status FAILED", name)
 		}
 	} else {
 		logger.Printf("Skipping status wait for MCP server '%s'", name)
 	}
 
 	// MCP server successfully created (and reached a terminal state if we waited).
-	message := fmt.Sprintf("MCP server '%s' created successfully", name)
+	message := fmt.Sprintf("MCP server '%s' creation accepted", name)
 	switch deploymentFinalStatus {
 	case "DEPLOYED":
 		message = fmt.Sprintf("MCP server '%s' created and deployed successfully", name)
-	case "FAILED":
-		message = fmt.Sprintf("MCP server '%s' created; deployment reached terminal status FAILED", name)
 	}
 
 	result := map[string]interface{}{
@@ -273,6 +271,10 @@ func (h *SDKHandler) CreateMCPServer(ctx context.Context, name, integrationConne
 
 // DeleteMCPServer implements MCPServerHandler.DeleteMCPServer
 func (h *SDKHandler) DeleteMCPServer(ctx context.Context, name, waitForCompletion string) ([]byte, error) {
+	waitForCompletionBool, err := normalizeLifecycleWait(waitForCompletion)
+	if err != nil {
+		return nil, err
+	}
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -287,12 +289,6 @@ func (h *SDKHandler) DeleteMCPServer(ctx context.Context, name, waitForCompletio
 	}
 	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("failed to delete MCP server '%s': status %d", name, resp.StatusCode())
-	}
-
-	// Check if we should wait for completion
-	waitForCompletionBool := true // default to true
-	if waitForCompletion != "" {
-		waitForCompletionBool = waitForCompletion == "true"
 	}
 
 	// Wait for the MCP server to be fully deleted if requested
@@ -323,6 +319,17 @@ func (h *SDKHandler) DeleteMCPServer(ctx context.Context, name, waitForCompletio
 	}
 
 	return jsonData, nil
+}
+
+func normalizeLifecycleWait(value string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("waitForCompletion must be true or false")
+	}
 }
 
 // IsReadOnly implements MCPServerHandlerWithReadOnly.IsReadOnly

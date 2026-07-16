@@ -30,7 +30,7 @@ func TestDeleteModelAPINotFoundIsActionableToolError(t *testing.T) {
 	mcpServer := server.NewMCPServer("test", "1.0.0")
 	RegisterModelAPITools(mcpServer, handler, cfg)
 	registered := mcpServer.GetTool("delete_model_api")
-	result, err := registered.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"name": name, "waitForCompletion": "true"}}})
+	result, err := registered.Handler(context.Background(), mcp.CallToolRequest{Params: mcp.CallToolParams{Arguments: map[string]any{"name": name, "waitForCompletion": "false"}}})
 	if err != nil {
 		t.Fatalf("delete_model_api returned protocol error: %v", err)
 	}

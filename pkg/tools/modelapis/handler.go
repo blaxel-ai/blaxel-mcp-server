@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
@@ -113,6 +114,10 @@ func (h *SDKHandler) GetModelAPI(ctx context.Context, name string) ([]byte, erro
 
 // CreateModelAPI implements ModelAPIHandler.CreateModelAPI
 func (h *SDKHandler) CreateModelAPI(ctx context.Context, name, model, endpoint, integrationConnectionName, provider, apiKey, waitForCompletion string, config map[string]interface{}) ([]byte, error) {
+	waitForCompletionBool, err := normalizeLifecycleWait(waitForCompletion)
+	if err != nil {
+		return nil, err
+	}
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -237,35 +242,28 @@ func (h *SDKHandler) CreateModelAPI(ctx context.Context, name, model, endpoint, 
 		return nil, h.withInlineIntegrationRollback(ctx, integrationName, inlineIntegrationOwned, createErr)
 	}
 
-	// Check if we should wait for completion
-	waitForCompletionBool := true // default to true
-	if waitForCompletion != "" {
-		waitForCompletionBool = waitForCompletion == "true"
-	}
-
 	// Wait for the model API to reach a final status if requested.
 	deploymentFinalStatus := ""
 	if waitForCompletionBool {
 		logger.Printf("Waiting for model API '%s' to deploy...", name)
 		checker := NewModelAPIStatusChecker(h.sdkClient)
 		err = utils.WaitForResourceStatus(ctx, name, checker)
-		// FAILED is a terminal deployment result, so the wait is complete even
-		// though the generic status helper reports it as an unsuccessful deploy.
 		deploymentFinalStatus = checker.LastStatus()
-		if err != nil && deploymentFinalStatus != "FAILED" {
+		if err != nil {
 			return nil, fmt.Errorf("model API '%s' status wait failed: %w", name, err)
+		}
+		if deploymentFinalStatus == "FAILED" {
+			return nil, fmt.Errorf("model API '%s' deployment reached terminal status FAILED", name)
 		}
 	} else {
 		logger.Printf("Skipping status wait for model API '%s'", name)
 	}
 
 	// The model API was created and, when requested, reached a terminal state.
-	message := fmt.Sprintf("Model API '%s' created successfully", name)
+	message := fmt.Sprintf("Model API '%s' creation accepted", name)
 	switch deploymentFinalStatus {
 	case "DEPLOYED":
 		message = fmt.Sprintf("Model API '%s' created and deployed successfully", name)
-	case "FAILED":
-		message = fmt.Sprintf("Model API '%s' created; deployment reached terminal status FAILED", name)
 	}
 
 	result := map[string]interface{}{
@@ -322,6 +320,10 @@ func (h *SDKHandler) withInlineIntegrationRollback(ctx context.Context, name str
 
 // DeleteModelAPI implements ModelAPIHandler.DeleteModelAPI
 func (h *SDKHandler) DeleteModelAPI(ctx context.Context, name, waitForCompletion string) ([]byte, error) {
+	waitForCompletionBool, err := normalizeLifecycleWait(waitForCompletion)
+	if err != nil {
+		return nil, err
+	}
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -336,12 +338,6 @@ func (h *SDKHandler) DeleteModelAPI(ctx context.Context, name, waitForCompletion
 	}
 	if resp.StatusCode() < http.StatusOK || resp.StatusCode() >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("failed to delete model API '%s': status %d", name, resp.StatusCode())
-	}
-
-	// Check if we should wait for completion
-	waitForCompletionBool := true // default to true
-	if waitForCompletion != "" {
-		waitForCompletionBool = waitForCompletion == "true"
 	}
 
 	// Wait for the model API to be fully deleted if requested
@@ -372,6 +368,17 @@ func (h *SDKHandler) DeleteModelAPI(ctx context.Context, name, waitForCompletion
 	}
 
 	return jsonData, nil
+}
+
+func normalizeLifecycleWait(value string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("waitForCompletion must be true or false")
+	}
 }
 
 // IsReadOnly implements ModelAPIHandlerWithReadOnly.IsReadOnly
