@@ -58,13 +58,15 @@ jobs:
 
           go build -ldflags "${LDFLAGS}" -o "dist/${BINARY_NAME}" ./cmd/blaxel-mcp-server
 
-          # Create tarball (zip for windows)
+          # Include the license with every distributed binary.
+          cp LICENSE dist/LICENSE
           cd dist
           if [ "${GOOS}" = "windows" ]; then
-            zip "${BINARY_NAME%.exe}.zip" "${BINARY_NAME}"
+            zip "${BINARY_NAME%.exe}.zip" "${BINARY_NAME}" LICENSE
           else
-            tar -czf "${BINARY_NAME}.tar.gz" "${BINARY_NAME}"
+            tar -czf "${BINARY_NAME}.tar.gz" "${BINARY_NAME}" LICENSE
           fi
+          rm LICENSE
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
@@ -107,5 +109,6 @@ jobs:
             artifacts/*.tar.gz
             artifacts/*.zip
             artifacts/checksums.txt
+            LICENSE
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
