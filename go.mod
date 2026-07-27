@@ -7,7 +7,7 @@ require (
 	github.com/blaxel-ai/toolkit v0.1.38
 	github.com/joho/godotenv v1.5.1
 	github.com/mark3labs/mcp-go v0.54.1
-	github.com/oapi-codegen/runtime v1.1.1
+	github.com/oapi-codegen/runtime v1.6.0
 )
 
 require (
@@ -29,8 +29,8 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
