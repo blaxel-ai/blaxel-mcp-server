@@ -1,6 +1,6 @@
 module github.com/blaxel-ai/blaxel-mcp-server
 
-go 1.25.0
+go 1.25.12
 
 require (
 	github.com/blaxel-ai/sdk-go v0.18.0
