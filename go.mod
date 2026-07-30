@@ -1,6 +1,6 @@
 module github.com/blaxel-ai/blaxel-mcp-server
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/blaxel-ai/sdk-go v0.18.0
@@ -26,8 +26,8 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
