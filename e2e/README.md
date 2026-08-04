@@ -122,16 +122,9 @@ Lane-specific gates are deliberately separate:
   survives even while production still silently defaults invalid values.
 - `make test-e2e-live-reviewer-auth` (PM-2611) runs the reviewer-confirmed
   API-key/workspace-only tools/list path and verifies no secret persistence.
+- `make test-e2e-live-reviewer-fixtures` calls the configured echo agent and job through the exact standalone MCP binary. It verifies request mapping and never deletes either stable reviewer fixture.
 
-The tools/list contract (ENG-3420/PM-2229) requires exactly 41 hosted tools,
-nonempty titles/descriptions, all annotation pointers, names of at most 64
-bytes, and one explicit safe or unsafe operation per tool (no combined method
-catch-all). List/get are read-only and non-destructive; all five additive
-`create_*` tools plus `invite_workspace_user` are non-destructive; and
-`delete`/`update`/`remove`/`run`/`stop`/`kill` are destructive.
-`TestExecutableWorkflowCoverage` remains fail-closed and intentionally RED for
-any discovered tool without a successful public workflow; validation or
-missing-argument calls never count.
+The tools/list contract (ENG-3420/PM-2229) requires exactly 41 hosted tools, nonempty titles/descriptions, all annotation pointers, names of at most 64 bytes, and one explicit safe or unsafe operation per tool (no combined method catch-all). List/get tools are read-only and non-destructive. Create, invite, delete, update, remove, run, stop, and kill tools are destructive. The service-account lifecycle proves the default response masks the one-time secret, explicit `revealSecret: true` reveals it once, and both disposable accounts are deleted. `TestExecutableWorkflowCoverage` remains fail-closed and intentionally RED for any discovered tool without a successful public workflow; validation or missing-argument calls never count.
 
 Run specific test:
 ```bash

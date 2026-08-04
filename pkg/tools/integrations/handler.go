@@ -100,13 +100,27 @@ func (h *SDKHandler) GetIntegration(ctx context.Context, name string) ([]byte, e
 		return nil, fmt.Errorf("no integration found")
 	}
 
-	// Convert to JSON for better formatting
-	jsonData, err := json.MarshalIndent(*integration.JSON200, "", "  ")
+	// Redact again at the MCP boundary so an upstream regression cannot place a
+	// live credential in a transcript or client log.
+	jsonData, err := json.MarshalIndent(maskIntegrationSecrets(*integration.JSON200), "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to format integration data: %w", err)
 	}
 
 	return jsonData, nil
+}
+
+// maskIntegrationSecrets returns a copy with every secret value redacted.
+func maskIntegrationSecrets(integration sdk.IntegrationConnection) sdk.IntegrationConnection {
+	if integration.Spec == nil || integration.Spec.Secret == nil {
+		return integration
+	}
+
+	spec := *integration.Spec
+	maskedSecrets := tools.MaskSecretMap(*spec.Secret)
+	spec.Secret = &maskedSecrets
+	integration.Spec = &spec
+	return integration
 }
 
 // CreateIntegration implements IntegrationHandler.CreateIntegration
@@ -218,9 +232,9 @@ func convertToIntegrationModel(integration sdk.IntegrationConnection) formatter.
 		model.Labels = *integration.Metadata.Labels
 	}
 
-	// Extract secrets
+	// Redact secrets before the formatter renders them into the MCP response.
 	if integration.Spec != nil && integration.Spec.Secret != nil {
-		model.Secrets = *integration.Spec.Secret
+		model.Secrets = tools.MaskSecretMap(*integration.Spec.Secret)
 	}
 
 	// Extract config

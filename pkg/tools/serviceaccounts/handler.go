@@ -157,8 +157,11 @@ func (h *SDKHandler) GetServiceAccount(ctx context.Context, clientID string) ([]
 	return nil, fmt.Errorf("service account with client ID '%s' not found", clientID)
 }
 
-// CreateServiceAccount implements ServiceAccountHandler.CreateServiceAccount
-func (h *SDKHandler) CreateServiceAccount(ctx context.Context, name string) ([]byte, error) {
+// CreateServiceAccount implements ServiceAccountHandler.CreateServiceAccount.
+// The API returns the client secret only once. Redact it unless the caller
+// explicitly opts in because MCP responses may be stored in transcripts and
+// client logs.
+func (h *SDKHandler) CreateServiceAccount(ctx context.Context, name string, revealSecret bool) ([]byte, error) {
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -190,8 +193,13 @@ func (h *SDKHandler) CreateServiceAccount(ctx context.Context, name string) ([]b
 	if createdAccount.ClientID != nil {
 		serviceAccount["client_id"] = *createdAccount.ClientID
 		if createdAccount.ClientSecret != nil {
-			serviceAccount["client_secret"] = *createdAccount.ClientSecret
-			result["message"] = fmt.Sprintf("Service account '%s' created successfully. Save the client_secret as it won't be shown again.", name)
+			if revealSecret {
+				serviceAccount["client_secret"] = *createdAccount.ClientSecret
+				result["message"] = fmt.Sprintf("Service account '%s' created successfully. Save the client_secret securely because it will not be shown again.", name)
+			} else {
+				serviceAccount["client_secret"] = tools.MaskSecret(*createdAccount.ClientSecret)
+				result["message"] = fmt.Sprintf("Service account '%s' created successfully. The one-time client_secret was redacted. Delete this account and create another with revealSecret set to true if the credential is required.", name)
+			}
 		}
 	}
 

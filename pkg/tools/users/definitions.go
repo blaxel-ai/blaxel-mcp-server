@@ -107,7 +107,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 			mcp.WithTitleAnnotation("Invite Workspace User"),
 			mcp.WithDescription("Invite a user to the workspace"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithString("email",

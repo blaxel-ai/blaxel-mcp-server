@@ -258,9 +258,6 @@ func assertAnthropicToolReviewReadiness(t *testing.T, result *mcp.ListToolsResul
 		if toolNameRequiresDestructiveHint(tool.Name) && (tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint) {
 			t.Errorf("tool %s should be annotated destructive because it performs an unsafe action", tool.Name)
 		}
-		if toolNameRequiresAdditiveHint(tool.Name) && (tool.Annotations.DestructiveHint == nil || *tool.Annotations.DestructiveHint) {
-			t.Errorf("tool %s should be annotated non-destructive because it only performs additive updates", tool.Name)
-		}
 	}
 
 	if _, ok := toolsByName["run_sandbox"]; ok {
@@ -313,6 +310,27 @@ func assertAnthropicToolReviewReadiness(t *testing.T, result *mcp.ListToolsResul
 	if _, exists := getWorkspaceUser.InputSchema.Properties["email"]; !exists {
 		t.Error("get_workspace_user must expose email parameter")
 	}
+
+	createServiceAccount, ok := toolsByName["create_service_account"]
+	if !ok {
+		t.Fatalf("expected create_service_account tool")
+	}
+	revealSecret, exists := createServiceAccount.InputSchema.Properties["revealSecret"]
+	if !exists {
+		t.Fatal("create_service_account must expose revealSecret opt-in parameter")
+	}
+	revealSecretSchema, ok := revealSecret.(map[string]any)
+	if !ok || revealSecretSchema["type"] != "boolean" {
+		t.Errorf("create_service_account revealSecret schema = %#v, want boolean", revealSecret)
+	}
+	for _, required := range createServiceAccount.InputSchema.Required {
+		if required == "revealSecret" {
+			t.Error("create_service_account revealSecret must remain optional")
+		}
+	}
+	if !strings.Contains(createServiceAccount.Description, "redacted by default") {
+		t.Errorf("create_service_account description must explain the safe default, got %q", createServiceAccount.Description)
+	}
 }
 
 func toolNameRequiresReadOnlyHint(name string) bool {
@@ -324,6 +342,12 @@ func toolNameRequiresReadOnlyHint(name string) bool {
 
 func toolNameRequiresDestructiveHint(name string) bool {
 	for _, exactName := range []string{
+		"create_integration",
+		"create_mcp_server",
+		"create_model_api",
+		"create_sandbox",
+		"create_service_account",
+		"invite_workspace_user",
 		"update_service_account",
 		"update_workspace_user_role",
 	} {
@@ -342,22 +366,6 @@ func toolNameRequiresDestructiveHint(name string) bool {
 		"local_run_",
 	} {
 		if strings.HasPrefix(name, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-func toolNameRequiresAdditiveHint(name string) bool {
-	for _, exactName := range []string{
-		"create_integration",
-		"create_mcp_server",
-		"create_model_api",
-		"create_sandbox",
-		"create_service_account",
-		"invite_workspace_user",
-	} {
-		if name == exactName {
 			return true
 		}
 	}
