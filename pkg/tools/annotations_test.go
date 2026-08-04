@@ -15,7 +15,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-func TestPureCreateAndInviteAnnotations(t *testing.T) {
+func TestCreateAndInviteAnnotationsAreDestructive(t *testing.T) {
 	s := newAnnotationTestServer()
 
 	for _, name := range []string{
@@ -27,7 +27,7 @@ func TestPureCreateAndInviteAnnotations(t *testing.T) {
 		"invite_workspace_user",
 	} {
 		t.Run(name, func(t *testing.T) {
-			assertMutationAnnotations(t, s, name, false)
+			assertMutationAnnotations(t, s, name, true)
 		})
 	}
 }

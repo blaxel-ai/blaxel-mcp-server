@@ -157,7 +157,9 @@ func (h *SDKHandler) GetServiceAccount(ctx context.Context, clientID string) ([]
 	return nil, fmt.Errorf("service account with client ID '%s' not found", clientID)
 }
 
-// CreateServiceAccount implements ServiceAccountHandler.CreateServiceAccount
+// CreateServiceAccount implements ServiceAccountHandler.CreateServiceAccount.
+// The API returns the client secret only once, so include it in the creation
+// response and tell the caller to store it securely.
 func (h *SDKHandler) CreateServiceAccount(ctx context.Context, name string) ([]byte, error) {
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
@@ -191,7 +193,7 @@ func (h *SDKHandler) CreateServiceAccount(ctx context.Context, name string) ([]b
 		serviceAccount["client_id"] = *createdAccount.ClientID
 		if createdAccount.ClientSecret != nil {
 			serviceAccount["client_secret"] = *createdAccount.ClientSecret
-			result["message"] = fmt.Sprintf("Service account '%s' created successfully. Save the client_secret as it won't be shown again.", name)
+			result["message"] = fmt.Sprintf("Service account '%s' created successfully. Save the client_secret securely because it will not be shown again.", name)
 		}
 	}
 

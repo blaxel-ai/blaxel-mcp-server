@@ -195,6 +195,25 @@ func TestHostedToolsListContract(t *testing.T) {
 			t.Errorf("update_service_account required = %v, want exact %v", required, wantRequired)
 		}
 	})
+
+	t.Run("create_service_account_returns_one_time_secret", func(t *testing.T) {
+		tool := actual["create_service_account"]
+		var properties []string
+		for name := range tool.InputSchema.Properties {
+			properties = append(properties, name)
+		}
+		sort.Strings(properties)
+		wantProperties := []string{"name", "workspace"}
+		if fmt.Sprint(properties) != fmt.Sprint(wantProperties) {
+			t.Errorf("create_service_account properties = %v, want exact %v", properties, wantProperties)
+		}
+		if !contains(tool.InputSchema.Required, "name") {
+			t.Errorf("create_service_account required = %v, want name only", tool.InputSchema.Required)
+		}
+		if !strings.Contains(tool.Description, "one-time client secret") {
+			t.Errorf("create_service_account description must explain one-time secret delivery, got %q", tool.Description)
+		}
+	})
 }
 
 func TestMarketplaceReadiness(t *testing.T) {
@@ -325,21 +344,15 @@ func TestStrictToolValidationMatrix(t *testing.T) {
 
 func assertAnnotationPolicy(t *testing.T, tools map[string]mcp.Tool) {
 	t.Helper()
-	pureCreates := map[string]bool{
-		"create_model_api": true, "create_mcp_server": true, "create_sandbox": true,
-		"create_integration": true, "create_service_account": true,
-	}
 	for name, tool := range tools {
 		if tool.Annotations.ReadOnlyHint == nil || tool.Annotations.DestructiveHint == nil {
 			continue
 		}
 		wantReadOnly := strings.HasPrefix(name, "list_") || strings.HasPrefix(name, "get_")
-		wantDestructive := strings.HasPrefix(name, "delete_") || strings.HasPrefix(name, "update_") ||
+		wantDestructive := strings.HasPrefix(name, "create_") || strings.HasPrefix(name, "delete_") || strings.HasPrefix(name, "update_") ||
+			strings.HasPrefix(name, "invite_") ||
 			strings.HasPrefix(name, "remove_") || strings.HasPrefix(name, "run_") ||
 			strings.HasPrefix(name, "stop_") || strings.HasPrefix(name, "kill_")
-		if pureCreates[name] || name == "invite_workspace_user" {
-			wantDestructive = false
-		}
 		if got := *tool.Annotations.ReadOnlyHint; got != wantReadOnly {
 			t.Errorf("tool %q readOnlyHint = %t, want %t", name, got, wantReadOnly)
 		}

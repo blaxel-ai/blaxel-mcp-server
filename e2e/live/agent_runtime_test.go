@@ -44,3 +44,27 @@ func TestENG3423AgentRequestMapping(t *testing.T) {
 		t.Fatalf("echoed body = %#v, want %#v", neutral["body"], body)
 	}
 }
+
+func TestReviewerJobFixture(t *testing.T) {
+	job := strings.TrimSpace(os.Getenv("BLAXEL_E2E_JOB"))
+	if job == "" {
+		t.Fatal("reviewer fixture lane requires BLAXEL_E2E_JOB naming a real echo job")
+	}
+	client := newStrictClient(t)
+	if listed := client.call("list_jobs", map[string]any{"filter": job}); !strings.Contains(listed, job) {
+		t.Fatal("dedicated reviewer job fixture is not present")
+	}
+	if got := client.call("get_job", map[string]any{"id": job}); !strings.Contains(got, job) {
+		t.Fatal("get_job did not return the dedicated reviewer fixture")
+	}
+
+	marker := "job-parameters-" + liveConfig.Prefix
+	parameters, err := json.Marshal(map[string]any{"tasks": []map[string]any{{"marker": marker}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := client.call("run_job", map[string]any{"name": job, "parameters": string(parameters)})
+	if !strings.Contains(result, marker) {
+		t.Fatal("reviewer job fixture output did not prove parameters mapping")
+	}
+}

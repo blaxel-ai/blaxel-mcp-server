@@ -1,4 +1,4 @@
-.PHONY: build run clean test test-e2e test-e2e-live test-e2e-live-mcp-server test-e2e-live-provider-security test-e2e-live-user-security test-e2e-live-input-validation test-e2e-live-reviewer-auth test-all install deps fmt lint
+.PHONY: build run clean test test-e2e test-e2e-live test-e2e-live-mcp-server test-e2e-live-provider-security test-e2e-live-user-security test-e2e-live-input-validation test-e2e-live-reviewer-auth test-e2e-live-reviewer-fixtures test-all install deps fmt lint
 ARGS:= $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
 
 # Variables
@@ -72,6 +72,10 @@ test-e2e-live-reviewer-auth: build
 	@BLAXEL_E2E_RUN_PREFIX="$${BLAXEL_E2E_RUN_PREFIX:-mcp-live-$$(date -u +%Y%m%d%H%M%S)-$$$$}" \
 		go test -count=1 -v ./e2e/live -run '^TestPM2611APIKeyWorkspaceAuthentication$$' -timeout 5m
 
+test-e2e-live-reviewer-fixtures: build
+	@BLAXEL_E2E_RUN_PREFIX="$${BLAXEL_E2E_RUN_PREFIX:-mcp-live-$$(date -u +%Y%m%d%H%M%S)-$$$$}" \
+		go test -count=1 -v ./e2e/live -run '^(TestENG3423AgentRequestMapping|TestReviewerJobFixture)$$' -timeout 10m
+
 # Run all non-live tests. Live tests are intentionally explicit and destructive.
 test-all: test test-e2e
 
@@ -138,6 +142,7 @@ help:
 	@echo "  make test-e2e-live-user-security - Run disposable-user security lane"
 	@echo "  make test-e2e-live-input-validation - Run ENG-3890 sandbox input validation lane"
 	@echo "  make test-e2e-live-reviewer-auth - Run reviewer-confirmed API key auth lane"
+	@echo "  make test-e2e-live-reviewer-fixtures - Run stable reviewer echo agent and job"
 	@echo "  make deps       - Install dependencies"
 	@echo "  make fmt        - Format code"
 	@echo "  make lint       - Run linter"

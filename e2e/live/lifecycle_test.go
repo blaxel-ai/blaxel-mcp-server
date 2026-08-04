@@ -461,7 +461,8 @@ func TestProviderMutationSecurityLane(t *testing.T) {
 		// Omitting write-only credentials is safe. If the response includes the
 		// submitted key, it must be visibly masked; the dynamic scanner above
 		// already rejects the exact plaintext value.
-		if strings.Contains(probe.text, "apiKey") && !strings.Contains(probe.text, "*") {
+		lower := strings.ToLower(probe.text)
+		if strings.Contains(probe.text, "apiKey") && !strings.Contains(probe.text, "*") && !strings.Contains(lower, "redacted") && !strings.Contains(lower, "masked") {
 			t.Fatalf("%s exposed an unmasked apiKey field", probe.name)
 		}
 	}
@@ -735,11 +736,11 @@ func TestServiceAccountLifecycle(t *testing.T) {
 		t.Fatal("create_service_account result missing client_id")
 	}
 	secret, _ := account["client_secret"].(string)
-	if secret == "" {
+	if secret == "" || secret == "[REDACTED]" {
 		t.Fatal("create_service_account result missing one-time client_secret")
 	}
-	// Protect the one-time secret before any subsequent tool call, cleanup, or
-	// stderr drain. Leak detection retains it only in memory and never logs it.
+	// Register the one-time secret before any later tool call or stderr drain.
+	// Leak detection stores it only in memory and never prints it.
 	client.protectSecret(secret)
 	delete(account, "client_secret")
 

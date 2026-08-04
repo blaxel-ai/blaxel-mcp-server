@@ -106,7 +106,7 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 			mcp.WithTitleAnnotation("Create MCP Server"),
 			mcp.WithDescription("Create an MCP server (function), optionally with an existing or new integration"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",

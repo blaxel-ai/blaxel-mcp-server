@@ -147,3 +147,47 @@ func TestCreateServiceAccountAcceptsCreatedResponse(t *testing.T) {
 		t.Fatal("test response should not contain a client secret")
 	}
 }
+
+func TestCreateServiceAccountReturnsOneTimeSecret(t *testing.T) {
+	const accountName = "test-service-account"
+	const clientID = "test-client-id"
+	const clientSecret = "blx_live-client-secret"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"name":"test-service-account","client_id":"test-client-id","client_secret":"blx_live-client-secret"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	handler, err := NewSDKHandler(&config.Config{
+		APIEndpoint: server.URL,
+		RunEndpoint: server.URL,
+		Workspace:   "test-workspace",
+		Credentials: sdk.Credentials{APIKey: "test-api-key"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create service account handler: %v", err)
+	}
+
+	result, err := handler.CreateServiceAccount(context.Background(), accountName)
+	if err != nil {
+		t.Fatalf("create service account failed: %v", err)
+	}
+
+	var decoded struct {
+		ServiceAccount struct {
+			ClientID     string `json:"client_id"`
+			ClientSecret string `json:"client_secret"`
+		} `json:"service_account"`
+	}
+	if err := json.Unmarshal(result, &decoded); err != nil {
+		t.Fatalf("failed to decode handler response: %v", err)
+	}
+	if decoded.ServiceAccount.ClientID != clientID {
+		t.Fatalf("client ID = %q, want %q", decoded.ServiceAccount.ClientID, clientID)
+	}
+	if decoded.ServiceAccount.ClientSecret != clientSecret {
+		t.Fatalf("client secret = %q, want one-time secret", decoded.ServiceAccount.ClientSecret)
+	}
+}

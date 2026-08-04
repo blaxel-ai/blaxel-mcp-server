@@ -65,9 +65,45 @@ func TestUpdateServiceAccountBindsClientIDAndName(t *testing.T) {
 	}
 }
 
+func TestCreateServiceAccountSchemaAndBinding(t *testing.T) {
+	mcpServer := server.NewMCPServer("test", "1.0.0")
+	handler := &recordingServiceAccountHandler{}
+	RegisterServiceAccountTools(mcpServer, handler, &config.Config{})
+
+	registered := mcpServer.GetTool("create_service_account")
+	if registered == nil {
+		t.Fatal("create_service_account is not registered")
+	}
+
+	properties := make([]string, 0, len(registered.Tool.InputSchema.Properties))
+	for property := range registered.Tool.InputSchema.Properties {
+		properties = append(properties, property)
+	}
+	sort.Strings(properties)
+	if want := []string{"name", "workspace"}; !reflect.DeepEqual(properties, want) {
+		t.Fatalf("properties = %v, want %v", properties, want)
+	}
+	if want := []string{"name"}; !reflect.DeepEqual(registered.Tool.InputSchema.Required, want) {
+		t.Fatalf("required properties = %v, want %v", registered.Tool.InputSchema.Required, want)
+	}
+	result, err := registered.Handler(context.Background(), mcp.CallToolRequest{
+		Params: mcp.CallToolParams{Arguments: map[string]any{"name": "ci"}},
+	})
+	if err != nil {
+		t.Fatalf("handler returned error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handler returned tool error: %v", result.Content)
+	}
+	if handler.createdName != "ci" {
+		t.Fatalf("created name = %q, want ci", handler.createdName)
+	}
+}
+
 type recordingServiceAccountHandler struct {
 	updatedClientID string
 	updatedName     string
+	createdName     string
 }
 
 func (*recordingServiceAccountHandler) ListServiceAccounts(context.Context, string) ([]byte, error) {
@@ -76,8 +112,9 @@ func (*recordingServiceAccountHandler) ListServiceAccounts(context.Context, stri
 func (*recordingServiceAccountHandler) GetServiceAccount(context.Context, string) ([]byte, error) {
 	return nil, nil
 }
-func (*recordingServiceAccountHandler) CreateServiceAccount(context.Context, string) ([]byte, error) {
-	return nil, nil
+func (h *recordingServiceAccountHandler) CreateServiceAccount(_ context.Context, name string) ([]byte, error) {
+	h.createdName = name
+	return []byte(`{"success":true}`), nil
 }
 func (*recordingServiceAccountHandler) DeleteServiceAccount(context.Context, string) ([]byte, error) {
 	return nil, nil

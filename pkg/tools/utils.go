@@ -44,6 +44,31 @@ func ContainsString(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
+const redactedSecret = "[REDACTED]"
+
+// MaskSecret replaces a non-empty credential with a fixed marker. The marker
+// does not reveal the original value or its length and is safe to include in an
+// MCP response.
+func MaskSecret(value string) string {
+	if value == "" {
+		return ""
+	}
+	return redactedSecret
+}
+
+// MaskSecretMap returns a redacted copy without modifying the caller's map.
+func MaskSecretMap(secrets map[string]string) map[string]string {
+	if secrets == nil {
+		return nil
+	}
+
+	masked := make(map[string]string, len(secrets))
+	for key, value := range secrets {
+		masked[key] = MaskSecret(value)
+	}
+	return masked
+}
+
 func SetRuntimeEnv(env string) *[]interface{} {
 	if env == "" {
 		return nil
