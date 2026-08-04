@@ -133,7 +133,7 @@ func (annotationHandler) ListServiceAccounts(context.Context, string) ([]byte, e
 	return nil, nil
 }
 func (annotationHandler) GetServiceAccount(context.Context, string) ([]byte, error) { return nil, nil }
-func (annotationHandler) CreateServiceAccount(context.Context, string, bool) ([]byte, error) {
+func (annotationHandler) CreateServiceAccount(context.Context, string) ([]byte, error) {
 	return nil, nil
 }
 func (annotationHandler) DeleteServiceAccount(context.Context, string) ([]byte, error) {
