@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
@@ -119,7 +118,7 @@ func TestCreateServiceAccountAcceptsCreatedResponse(t *testing.T) {
 		t.Fatalf("failed to create service account handler: %v", err)
 	}
 
-	result, err := handler.CreateServiceAccount(context.Background(), accountName, false)
+	result, err := handler.CreateServiceAccount(context.Background(), accountName)
 	if err != nil {
 		t.Fatalf("expected create service account to accept 201 response: %v", err)
 	}
@@ -149,60 +148,46 @@ func TestCreateServiceAccountAcceptsCreatedResponse(t *testing.T) {
 	}
 }
 
-func TestCreateServiceAccountSecretDisclosureRequiresOptIn(t *testing.T) {
+func TestCreateServiceAccountReturnsOneTimeSecret(t *testing.T) {
 	const accountName = "test-service-account"
 	const clientID = "test-client-id"
 	const clientSecret = "blx_live-client-secret"
 
-	for _, test := range []struct {
-		name         string
-		revealSecret bool
-		wantSecret   string
-	}{
-		{name: "redacted by default", wantSecret: "[REDACTED]"},
-		{name: "revealed on explicit opt-in", revealSecret: true, wantSecret: clientSecret},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusCreated)
-				_, _ = w.Write([]byte(`{"name":"test-service-account","client_id":"test-client-id","client_secret":"blx_live-client-secret"}`))
-			}))
-			t.Cleanup(server.Close)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"name":"test-service-account","client_id":"test-client-id","client_secret":"blx_live-client-secret"}`))
+	}))
+	t.Cleanup(server.Close)
 
-			handler, err := NewSDKHandler(&config.Config{
-				APIEndpoint: server.URL,
-				RunEndpoint: server.URL,
-				Workspace:   "test-workspace",
-				Credentials: sdk.Credentials{APIKey: "test-api-key"},
-			})
-			if err != nil {
-				t.Fatalf("failed to create service account handler: %v", err)
-			}
+	handler, err := NewSDKHandler(&config.Config{
+		APIEndpoint: server.URL,
+		RunEndpoint: server.URL,
+		Workspace:   "test-workspace",
+		Credentials: sdk.Credentials{APIKey: "test-api-key"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create service account handler: %v", err)
+	}
 
-			result, err := handler.CreateServiceAccount(context.Background(), accountName, test.revealSecret)
-			if err != nil {
-				t.Fatalf("create service account failed: %v", err)
-			}
+	result, err := handler.CreateServiceAccount(context.Background(), accountName)
+	if err != nil {
+		t.Fatalf("create service account failed: %v", err)
+	}
 
-			var decoded struct {
-				ServiceAccount struct {
-					ClientID     string `json:"client_id"`
-					ClientSecret string `json:"client_secret"`
-				} `json:"service_account"`
-			}
-			if err := json.Unmarshal(result, &decoded); err != nil {
-				t.Fatalf("failed to decode handler response: %v", err)
-			}
-			if decoded.ServiceAccount.ClientID != clientID {
-				t.Fatalf("client ID = %q, want %q", decoded.ServiceAccount.ClientID, clientID)
-			}
-			if decoded.ServiceAccount.ClientSecret != test.wantSecret {
-				t.Fatalf("client secret = %q, want %q", decoded.ServiceAccount.ClientSecret, test.wantSecret)
-			}
-			if !test.revealSecret && strings.Contains(string(result), clientSecret) {
-				t.Fatal("default response contains the plaintext client secret")
-			}
-		})
+	var decoded struct {
+		ServiceAccount struct {
+			ClientID     string `json:"client_id"`
+			ClientSecret string `json:"client_secret"`
+		} `json:"service_account"`
+	}
+	if err := json.Unmarshal(result, &decoded); err != nil {
+		t.Fatalf("failed to decode handler response: %v", err)
+	}
+	if decoded.ServiceAccount.ClientID != clientID {
+		t.Fatalf("client ID = %q, want %q", decoded.ServiceAccount.ClientID, clientID)
+	}
+	if decoded.ServiceAccount.ClientSecret != clientSecret {
+		t.Fatalf("client secret = %q, want one-time secret", decoded.ServiceAccount.ClientSecret)
 	}
 }

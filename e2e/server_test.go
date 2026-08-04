@@ -315,21 +315,11 @@ func assertAnthropicToolReviewReadiness(t *testing.T, result *mcp.ListToolsResul
 	if !ok {
 		t.Fatalf("expected create_service_account tool")
 	}
-	revealSecret, exists := createServiceAccount.InputSchema.Properties["revealSecret"]
-	if !exists {
-		t.Fatal("create_service_account must expose revealSecret opt-in parameter")
+	if _, exists := createServiceAccount.InputSchema.Properties["revealSecret"]; exists {
+		t.Error("create_service_account must not expose a revealSecret parameter")
 	}
-	revealSecretSchema, ok := revealSecret.(map[string]any)
-	if !ok || revealSecretSchema["type"] != "boolean" {
-		t.Errorf("create_service_account revealSecret schema = %#v, want boolean", revealSecret)
-	}
-	for _, required := range createServiceAccount.InputSchema.Required {
-		if required == "revealSecret" {
-			t.Error("create_service_account revealSecret must remain optional")
-		}
-	}
-	if !strings.Contains(createServiceAccount.Description, "redacted by default") {
-		t.Errorf("create_service_account description must explain the safe default, got %q", createServiceAccount.Description)
+	if !strings.Contains(createServiceAccount.Description, "one-time client secret") {
+		t.Errorf("create_service_account description must explain one-time secret delivery, got %q", createServiceAccount.Description)
 	}
 }
 

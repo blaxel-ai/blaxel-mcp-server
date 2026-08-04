@@ -196,26 +196,22 @@ func TestHostedToolsListContract(t *testing.T) {
 		}
 	})
 
-	t.Run("create_service_account_requires_explicit_secret_disclosure", func(t *testing.T) {
+	t.Run("create_service_account_returns_one_time_secret", func(t *testing.T) {
 		tool := actual["create_service_account"]
 		var properties []string
 		for name := range tool.InputSchema.Properties {
 			properties = append(properties, name)
 		}
 		sort.Strings(properties)
-		wantProperties := []string{"name", "revealSecret", "workspace"}
+		wantProperties := []string{"name", "workspace"}
 		if fmt.Sprint(properties) != fmt.Sprint(wantProperties) {
 			t.Errorf("create_service_account properties = %v, want exact %v", properties, wantProperties)
 		}
-		if !contains(tool.InputSchema.Required, "name") || contains(tool.InputSchema.Required, "revealSecret") {
+		if !contains(tool.InputSchema.Required, "name") {
 			t.Errorf("create_service_account required = %v, want name only", tool.InputSchema.Required)
 		}
-		revealSecret, ok := tool.InputSchema.Properties["revealSecret"].(map[string]any)
-		if !ok || revealSecret["type"] != "boolean" {
-			t.Errorf("create_service_account revealSecret schema = %#v, want boolean", tool.InputSchema.Properties["revealSecret"])
-		}
-		if !strings.Contains(tool.Description, "redacted by default") {
-			t.Errorf("create_service_account description must explain the safe default, got %q", tool.Description)
+		if !strings.Contains(tool.Description, "one-time client secret") {
+			t.Errorf("create_service_account description must explain one-time secret delivery, got %q", tool.Description)
 		}
 	})
 }

@@ -717,19 +717,13 @@ func TestServiceAccountLifecycle(t *testing.T) {
 	ledger := newCleanupLedger(t, client)
 	name := liveConfig.Prefix + "-sa"
 	renamed := liveConfig.Prefix + "-renamed"
-	revealedName := liveConfig.Prefix + "-sa-reveal"
 	clientID := ""
-	revealedClientID := ""
 	if existing := client.call("list_service_accounts", map[string]any{"filter": name}); listedResource(existing, name) {
 		t.Fatalf("refusing to mutate colliding service account %q", name)
-	}
-	if existing := client.call("list_service_accounts", map[string]any{"filter": revealedName}); listedResource(existing, revealedName) {
-		t.Fatalf("refusing to mutate colliding service account %q", revealedName)
 	}
 	// If create succeeds remotely but its response is lost or malformed, cleanup
 	// resolves the client ID from the unique name before deleting the account.
 	accountCleanup := ledger.add("service account", name, cleanupServiceAccount(client, name, &clientID))
-	revealedAccountCleanup := ledger.add("service account", revealedName, cleanupServiceAccount(client, revealedName, &revealedClientID))
 
 	createdText := client.call("create_service_account", map[string]any{"name": name})
 	created := parseJSONObject(t, createdText)
@@ -742,9 +736,12 @@ func TestServiceAccountLifecycle(t *testing.T) {
 		t.Fatal("create_service_account result missing client_id")
 	}
 	secret, _ := account["client_secret"].(string)
-	if secret != "[REDACTED]" {
-		t.Fatalf("create_service_account default client_secret = %q, want [REDACTED]", secret)
+	if secret == "" || secret == "[REDACTED]" {
+		t.Fatal("create_service_account result missing one-time client_secret")
 	}
+	// Register the one-time secret before any later tool call or stderr drain.
+	// Leak detection stores it only in memory and never prints it.
+	client.protectSecret(secret)
 	delete(account, "client_secret")
 
 	client.call("get_service_account", map[string]any{"name": clientID})
@@ -766,29 +763,4 @@ func TestServiceAccountLifecycle(t *testing.T) {
 		t.Fatal("deleted service account remains visible in list_service_accounts")
 	}
 	ledger.release(accountCleanup)
-
-	revealedText := client.call("create_service_account", map[string]any{"name": revealedName, "revealSecret": true})
-	revealed := parseJSONObject(t, revealedText)
-	revealedAccount, ok := revealed["service_account"].(map[string]any)
-	if !ok {
-		t.Fatal("create_service_account reveal result missing service_account object")
-	}
-	revealedClientID, _ = revealedAccount["client_id"].(string)
-	if revealedClientID == "" {
-		t.Fatal("create_service_account reveal result missing client_id")
-	}
-	revealedSecret, _ := revealedAccount["client_secret"].(string)
-	if revealedSecret == "" || revealedSecret == "[REDACTED]" {
-		t.Fatal("create_service_account reveal result missing one-time client_secret")
-	}
-	// Register the one-time secret before any later tool call or stderr drain.
-	// Leak detection stores it only in memory and never prints it.
-	client.protectSecret(revealedSecret)
-	delete(revealedAccount, "client_secret")
-
-	client.call("delete_service_account", map[string]any{"name": revealedClientID})
-	if !waitForListAbsence(t, client, "list_service_accounts", map[string]any{"filter": revealedName}, revealedName, 45*time.Second) {
-		t.Fatal("revealed service account remains visible after delete")
-	}
-	ledger.release(revealedAccountCleanup)
 }
