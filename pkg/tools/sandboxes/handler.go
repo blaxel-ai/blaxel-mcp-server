@@ -91,7 +91,7 @@ func (h *SDKHandler) GetSandbox(ctx context.Context, name string) ([]byte, error
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	sandbox, err := h.sdkClient.GetSandboxWithResponse(ctx, name)
+	sandbox, err := h.sdkClient.GetSandboxWithResponse(ctx, name, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sandbox: %w", err)
 	}
