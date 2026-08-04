@@ -101,12 +101,12 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create model API tool
-		createModelAPITool := mcp.NewTool("create_model_api",
-			mcp.WithToolTitle("Create Model API"),
-			mcp.WithTitleAnnotation("Create Model API"),
-			mcp.WithDescription("Create a model API with flexible integration options"),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
+	createModelAPITool := mcp.NewTool("create_model_api",
+		mcp.WithToolTitle("Create Model API"),
+		mcp.WithTitleAnnotation("Create Model API"),
+		mcp.WithDescription("Create a model API with flexible integration options"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",

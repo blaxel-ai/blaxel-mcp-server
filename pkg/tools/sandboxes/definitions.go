@@ -109,12 +109,12 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create sandbox tool
-		createSandboxTool := mcp.NewTool("create_sandbox",
-			mcp.WithToolTitle("Create Sandbox"),
-			mcp.WithTitleAnnotation("Create Sandbox"),
-			mcp.WithDescription("Create a new sandbox"),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
+	createSandboxTool := mcp.NewTool("create_sandbox",
+		mcp.WithToolTitle("Create Sandbox"),
+		mcp.WithTitleAnnotation("Create Sandbox"),
+		mcp.WithDescription("Create a new sandbox"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",

@@ -102,12 +102,12 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Invite user tool
-		inviteUserTool := mcp.NewTool("invite_workspace_user",
-			mcp.WithToolTitle("Invite Workspace User"),
-			mcp.WithTitleAnnotation("Invite Workspace User"),
-			mcp.WithDescription("Invite a user to the workspace"),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
+	inviteUserTool := mcp.NewTool("invite_workspace_user",
+		mcp.WithToolTitle("Invite Workspace User"),
+		mcp.WithTitleAnnotation("Invite Workspace User"),
+		mcp.WithDescription("Invite a user to the workspace"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(true),
 			mcp.WithString("email",

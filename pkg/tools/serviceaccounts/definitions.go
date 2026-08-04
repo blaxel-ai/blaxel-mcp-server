@@ -101,12 +101,12 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create service account tool
-		createServiceAccountTool := mcp.NewTool("create_service_account",
-			mcp.WithToolTitle("Create Service Account"),
-			mcp.WithTitleAnnotation("Create Service Account"),
-			mcp.WithDescription("Create a new service account and return its one-time client secret. Save the secret securely because it cannot be retrieved again."),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
+	createServiceAccountTool := mcp.NewTool("create_service_account",
+		mcp.WithToolTitle("Create Service Account"),
+		mcp.WithTitleAnnotation("Create Service Account"),
+		mcp.WithDescription("Create a new service account and return its one-time client secret. Save the secret securely because it cannot be retrieved again."),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",

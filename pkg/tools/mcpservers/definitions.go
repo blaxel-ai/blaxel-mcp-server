@@ -101,12 +101,12 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create MCP server tool
-		createMCPServerTool := mcp.NewTool("create_mcp_server",
-			mcp.WithToolTitle("Create MCP Server"),
-			mcp.WithTitleAnnotation("Create MCP Server"),
-			mcp.WithDescription("Create an MCP server (function), optionally with an existing or new integration"),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
+	createMCPServerTool := mcp.NewTool("create_mcp_server",
+		mcp.WithToolTitle("Create MCP Server"),
+		mcp.WithTitleAnnotation("Create MCP Server"),
+		mcp.WithDescription("Create an MCP server (function), optionally with an existing or new integration"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",

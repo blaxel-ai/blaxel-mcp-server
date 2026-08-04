@@ -100,12 +100,12 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create integration tool
-		createIntegrationTool := mcp.NewTool("create_integration",
-			mcp.WithToolTitle("Create Integration"),
-			mcp.WithTitleAnnotation("Create Integration"),
-			mcp.WithDescription("Create a new integration connection"),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
+	createIntegrationTool := mcp.NewTool("create_integration",
+		mcp.WithToolTitle("Create Integration"),
+		mcp.WithTitleAnnotation("Create Integration"),
+		mcp.WithDescription("Create a new integration connection"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
