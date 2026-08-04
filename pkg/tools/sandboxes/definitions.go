@@ -114,7 +114,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 			mcp.WithTitleAnnotation("Create Sandbox"),
 			mcp.WithDescription("Create a new sandbox"),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",

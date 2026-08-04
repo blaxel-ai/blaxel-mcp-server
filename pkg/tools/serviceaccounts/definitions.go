@@ -13,7 +13,7 @@ import (
 type ServiceAccountHandler interface {
 	ListServiceAccounts(ctx context.Context, filter string) ([]byte, error)
 	GetServiceAccount(ctx context.Context, clientID string) ([]byte, error)
-	CreateServiceAccount(ctx context.Context, name string) ([]byte, error)
+	CreateServiceAccount(ctx context.Context, name string, revealSecret bool) ([]byte, error)
 	DeleteServiceAccount(ctx context.Context, clientID string) ([]byte, error)
 	UpdateServiceAccount(ctx context.Context, clientID, name string) ([]byte, error)
 }
@@ -104,14 +104,17 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 		createServiceAccountTool := mcp.NewTool("create_service_account",
 			mcp.WithToolTitle("Create Service Account"),
 			mcp.WithTitleAnnotation("Create Service Account"),
-			mcp.WithDescription("Create a new service account"),
+			mcp.WithDescription("Create a new service account. The one-time client secret is redacted by default because MCP responses may be stored in transcripts and logs. Set revealSecret to true only when the caller is ready to store the credential securely."),
 			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(false),
 			mcp.WithOpenWorldHintAnnotation(false),
 			mcp.WithString("name",
 				mcp.Required(),
 				mcp.Description("Display name for the service account"),
+			),
+			mcp.WithBoolean("revealSecret",
+				mcp.Description("Return the one-time client secret in plaintext. Defaults to false. Set this only when the caller is ready to store the credential securely because MCP responses may be retained in transcripts and logs."),
 			),
 			mcp.WithString("workspace",
 				mcp.Description("Optional workspace name to override the default workspace"),
@@ -128,7 +131,7 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 				return mcp.NewToolResultError("service account name is required"), nil
 			}
 
-			result, err := activeHandler.CreateServiceAccount(ctx, name)
+			result, err := activeHandler.CreateServiceAccount(ctx, name, request.GetBool("revealSecret", false))
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
