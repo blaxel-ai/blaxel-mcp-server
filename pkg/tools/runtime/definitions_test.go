@@ -278,13 +278,43 @@ func TestRunModelBodySchemaAllowsObjectOrString(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected body schema map, got %T", tool.Tool.InputSchema.Properties["body"])
 	}
-	if schemaType, ok := bodySchema["type"]; ok {
-		t.Fatalf("run_model body schema should not force a single JSON Schema type, got %v", schemaType)
-	}
+	assertObjectOrStringType(t, "run_model", bodySchema)
 	description, _ := bodySchema["description"].(string)
 	if !strings.Contains(description, "object or JSON string") {
 		t.Fatalf("expected body description to document object-or-string input, got %q", description)
 	}
+}
+
+// assertObjectOrStringType requires an explicit JSON Schema type that permits
+// both objects and strings. Directory validators reject typeless parameters,
+// and a single scalar type would break one of the two supported body forms.
+func assertObjectOrStringType(t *testing.T, toolName string, schema map[string]any) {
+	t.Helper()
+	types, ok := schema["type"].([]string)
+	if !ok {
+		t.Fatalf("%s body schema must declare an explicit JSON Schema type list, got %T (%v)", toolName, schema["type"], schema["type"])
+	}
+	seen := map[string]bool{}
+	for _, typ := range types {
+		seen[typ] = true
+	}
+	if !seen["object"] || !seen["string"] || len(types) != 2 {
+		t.Fatalf("%s body schema type must allow exactly object and string, got %v", toolName, types)
+	}
+}
+
+func TestRunAgentBodySchemaAllowsObjectOrString(t *testing.T) {
+	mcpServer, _ := newRuntimeToolTestServer(t)
+	tool := mcpServer.GetTool("run_agent")
+	if tool == nil {
+		t.Fatal("expected run_agent tool")
+		return
+	}
+	bodySchema, ok := tool.Tool.InputSchema.Properties["body"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected body schema map, got %T", tool.Tool.InputSchema.Properties["body"])
+	}
+	assertObjectOrStringType(t, "run_agent", bodySchema)
 }
 
 func TestSDKHandlerRunAgentSendsBodyAndPathUnchanged(t *testing.T) {

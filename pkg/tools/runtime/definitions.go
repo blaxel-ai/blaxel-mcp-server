@@ -11,6 +11,16 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// objectOrString declares an explicit JSON Schema type for properties built
+// with mcp.WithAny. Connector directory validators reject parameters that
+// carry no type at all, and these bodies accept a JSON object or a JSON
+// string.
+func objectOrString() mcp.PropertyOption {
+	return func(schema map[string]any) {
+		schema["type"] = []string{"object", "string"}
+	}
+}
+
 // RuntimeHandler defines the interface for runtime operations
 type RuntimeHandler interface {
 	RunAgent(ctx context.Context, name, body, path string) (string, error)
@@ -91,6 +101,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			mcp.Description("Optional context data for message shorthand (JSON object string)"),
 		),
 		mcp.WithAny("body",
+			objectOrString(),
 			mcp.Description("Arbitrary JSON request body to send to the agent; use either body or message"),
 		),
 		mcp.WithString("path",
@@ -210,6 +221,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 		),
 		mcp.WithAny("body",
 			mcp.Required(),
+			objectOrString(),
 			mcp.Description("JSON request body for the Blaxel Model API endpoint, as an object or JSON string; see https://docs.blaxel.ai/Models/Query-a-model."),
 		),
 		mcp.WithString("path",
