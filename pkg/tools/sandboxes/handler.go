@@ -161,7 +161,11 @@ func (h *SDKHandler) CreateSandbox(ctx context.Context, name, image string, memo
 
 	// Add optional environment variables
 	if env != "" {
-		sandboxData.Spec.Runtime.Envs = tools.SetRuntimeEnv(env)
+		envs, err := tools.SetRuntimeEnv(env)
+		if err != nil {
+			return nil, err
+		}
+		sandboxData.Spec.Runtime.Envs = envs
 	}
 
 	// Create sandbox

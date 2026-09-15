@@ -1,0 +1,26 @@
+name: MCP compatibility
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    env:
+      BL_WORKSPACE: mcp-test
+      BL_API_KEY: test-key
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Check Go formatting
+        run: test -z "$(gofmt -l cmd pkg e2e)"
+      - name: Unit and real transport tests
+        run: make test-all

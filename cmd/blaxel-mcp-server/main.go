@@ -73,10 +73,14 @@ func main() {
 		cfg.ReadOnly = true
 	}
 
-	// Create MCP server
+	// Create MCP server. WithRecovery turns a panic in a tool handler into an
+	// error response instead of taking the process down -- under the default
+	// stdio transport there is nothing to restart it, so one bad argument would
+	// otherwise end the session.
 	mcp := server.NewMCPServer(
 		"blaxel-mcp-server",
 		version,
+		server.WithRecovery(),
 	)
 
 	// Register tools based on enabled toolsets

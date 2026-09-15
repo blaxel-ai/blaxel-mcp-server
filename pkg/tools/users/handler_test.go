@@ -156,3 +156,76 @@ func newUsersTestHandler(t *testing.T, endpoint string) UserHandler {
 	}
 	return handler
 }
+
+// The invite endpoint binds and honors a role, but the generated request type
+// carries only email, so sending the typed body silently dropped the requested
+// role and every invitee joined as a member.
+func TestInviteUserSendsTheRequestedRole(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		role     string
+		wantRole string
+	}{
+		{name: "admin", role: "admin", wantRole: "admin"},
+		{name: "owner", role: "owner", wantRole: "owner"},
+		{name: "defaults to member", role: "", wantRole: "member"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var got map[string]any
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.Method != http.MethodPost || r.URL.Path != "/users" {
+					t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+				}
+				if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+					t.Fatalf("decode invite request: %v", err)
+				}
+				_, _ = w.Write([]byte(`{}`))
+			}))
+			t.Cleanup(api.Close)
+
+			handler := newUsersTestHandler(t, api.URL)
+			result, err := handler.InviteUser(context.Background(), "person@example.com", tc.role)
+			if err != nil {
+				t.Fatalf("InviteUser() error = %v", err)
+			}
+			if got["role"] != tc.wantRole {
+				t.Fatalf("request role = %v, want %q", got["role"], tc.wantRole)
+			}
+			if got["email"] != "person@example.com" {
+				t.Fatalf("request email = %v, want person@example.com", got["email"])
+			}
+			if !strings.Contains(string(result), tc.wantRole) {
+				t.Fatalf("InviteUser() message = %s, want it to name the role %q", result, tc.wantRole)
+			}
+		})
+	}
+}
+
+func TestInviteUserRejectsAnUnknownRole(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("an unknown role must be rejected before the request: %s %s", r.Method, r.URL.Path)
+	}))
+	t.Cleanup(api.Close)
+
+	handler := newUsersTestHandler(t, api.URL)
+	_, err := handler.InviteUser(context.Background(), "person@example.com", "superadmin")
+	if err == nil || !strings.Contains(err.Error(), "invite accepts member, admin or owner") {
+		t.Fatalf("InviteUser() error = %v, want it to name the accepted roles", err)
+	}
+}
+
+// A caller cannot grant a role above their own; the endpoint enforces that with
+// a 403, which is a different fix from a duplicate invite.
+func TestInviteUserExplainsARefusedRole(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(api.Close)
+
+	handler := newUsersTestHandler(t, api.URL)
+	_, err := handler.InviteUser(context.Background(), "person@example.com", "owner")
+	if err == nil || !strings.Contains(err.Error(), "not privileged enough") {
+		t.Fatalf("InviteUser() error = %v, want it to explain the refused role", err)
+	}
+}

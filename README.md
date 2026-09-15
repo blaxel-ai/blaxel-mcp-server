@@ -133,7 +133,8 @@ export BL_READ_ONLY="true"              # Run in read-only mode
 # Run in read-only mode
 ./blaxel-mcp-server --read-only
 
-# Enable specific toolsets
+# Enable specific toolsets. Valid names: agents, modelapis, mcpservers,
+# sandboxes, jobs, integrations, users, serviceaccounts, runtime, local
 ./blaxel-mcp-server --toolsets agents,modelapis,integrations
 
 # Enable all toolsets (default)
@@ -308,9 +309,62 @@ Reuse an existing integration connection:
 - **Simpler for Agents**: AI agents can work with either mode based on context
 - **Better Organization**: Integrations can be managed separately from resources
 
-## Usage with Claude Desktop
+## Connecting a client
 
-Add the following to your Claude Desktop configuration (`claude_desktop_config.json`):
+Most users should connect to the **hosted** server rather than running this
+binary. The hosted endpoint is `https://api.blaxel.ai/v0/mcp`; it speaks
+streamable HTTP, supports OAuth 2.1 sign-in (PKCE `S256`, dynamic client
+registration, public clients) and accepts an API key as a fallback. It runs
+shared tool definitions from this repository. The hosted implementation adds
+cursor pagination to selected list tools and returns asynchronous lifecycle
+results for deployments.
+
+See [Blaxel's MCP documentation](https://docs.blaxel.ai/skills-mcp) for the
+per-client setup and OAuth sign-in instructions. In Claude.ai, add the URL
+under Customize → Connectors → Add custom connector, leave the OAuth client
+fields blank, and complete Blaxel sign-in.
+
+```bash
+# Codex
+codex mcp add blaxel --url https://api.blaxel.ai/v0/mcp
+
+# Claude Code
+claude mcp add --transport http blaxel https://api.blaxel.ai/v0/mcp
+```
+
+For Cursor, add the URL to `~/.cursor/mcp.json` and connect `blaxel` from the
+MCP settings pane:
+
+```json
+{
+  "mcpServers": {
+    "blaxel": {
+      "url": "https://api.blaxel.ai/v0/mcp"
+    }
+  }
+}
+```
+
+### Client tool limits
+
+This binary advertises 49 tools with `--toolsets all` (41 platform tools plus
+8 `local_*` project tools); the hosted server advertises the 41 platform tools.
+Clients may limit how many tools they expose to a model. Check your client
+settings if a discovered tool is unavailable in a conversation.
+
+If tools appear to be missing, narrow the surface rather than guessing: pass
+`--toolsets` to advertise only the groups you need (for example
+`--toolsets agents,sandboxes,runtime`), and disable MCP servers you are not
+using in the client.
+
+### Running this binary locally
+
+Run the binary directly when you are developing against this repository or
+need a toolset, transport or endpoint the hosted server does not offer. Both
+configurations below launch it over stdio, so the client needs a built binary
+and credentials in its environment.
+
+Claude Desktop (`claude_desktop_config.json`):
 
 ```json
 {
@@ -326,9 +380,7 @@ Add the following to your Claude Desktop configuration (`claude_desktop_config.j
 }
 ```
 
-## Usage with Cursor
-
-Add the following to your Cursor MCP settings:
+Cursor MCP settings:
 
 ```json
 {
@@ -344,6 +396,10 @@ Add the following to your Cursor MCP settings:
   }
 }
 ```
+
+A local process is bound to the single workspace in `BL_WORKSPACE`. The hosted
+server resolves the workspace per request instead, from the
+`X-Blaxel-Workspace` header.
 
 ## Strict live acceptance tests
 
@@ -416,6 +472,8 @@ If certain tools are not available:
 1. Check if you're running in read-only mode
 2. Verify the toolsets configuration
 3. Ensure you have the necessary permissions in your workspace
+4. Check whether the client is capping the number of tools it exposes; see
+   [Client tool limits](#client-tool-limits)
 
 ## License
 
