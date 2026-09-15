@@ -311,7 +311,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			mcp.Description("Optional maximum restart count when restartOnFailure is true"),
 		),
 		mcp.WithBoolean("keepAlive",
-			mcp.Description("Whether to keep the process alive after the initial command completes"),
+			mcp.Description("Whether to keep the sandbox awake while this process runs, preventing automatic standby"),
 			mcp.DefaultBool(false),
 		),
 		mcp.WithString("workspace",
