@@ -111,6 +111,11 @@ func (h *SDKHandler) GetSandbox(ctx context.Context, name string) ([]byte, error
 
 // CreateSandbox implements SandboxHandler.CreateSandbox
 func (h *SDKHandler) CreateSandbox(ctx context.Context, name, image string, memory float64, ports, env string) ([]byte, error) {
+	return h.CreateSandboxInRegion(ctx, name, image, memory, ports, env, "")
+}
+
+// CreateSandboxInRegion forwards explicit placement to the sandbox API.
+func (h *SDKHandler) CreateSandboxInRegion(ctx context.Context, name, image string, memory float64, ports, env, region string) ([]byte, error) {
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
@@ -133,6 +138,10 @@ func (h *SDKHandler) CreateSandbox(ctx context.Context, name, image string, memo
 		Spec: &sdk.SandboxSpec{
 			Runtime: &sdk.Runtime{},
 		},
+	}
+
+	if region != "" {
+		sandboxData.Spec.Region = &region
 	}
 
 	// Add optional image
