@@ -315,9 +315,10 @@ Most users should connect to the **hosted** server rather than running this
 binary. The hosted endpoint is `https://api.blaxel.ai/v0/mcp`; it speaks
 streamable HTTP, supports OAuth 2.1 sign-in (PKCE `S256`, dynamic client
 registration, public clients) and accepts an API key as a fallback. It runs
-shared tool definitions from this repository. The hosted implementation adds
-cursor pagination to selected list tools and returns asynchronous lifecycle
-results for deployments.
+a deployed version of the shared tool definitions from this repository.
+Available arguments and lifecycle responses depend on the deployed server
+version; inspect its `tools/list` schemas rather than assuming this checkout
+matches production.
 
 See [Blaxel's MCP documentation](https://docs.blaxel.ai/skills-mcp) for the
 per-client setup and OAuth sign-in instructions. In Claude.ai, add the URL
