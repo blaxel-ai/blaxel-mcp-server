@@ -254,3 +254,37 @@ func newMCPServerTestHandler(t *testing.T, endpoint string) MCPServerHandler {
 	}
 	return handler
 }
+
+// A 409 on the inline integration means an integration of that name already
+// exists. Adopting it would bind the new MCP server to credentials the caller
+// did not supply, and silently discard the ones they did. create_model_api
+// treats the same collision as an error; this path used to log and continue.
+func TestCreateMCPServerRejectsIntegrationNameCollision(t *testing.T) {
+	var functionCalls atomic.Int32
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/integrations/connections":
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"error":"already exists"}`))
+		case "/functions":
+			functionCalls.Add(1)
+			_, _ = w.Write([]byte(`{"metadata":{"name":"integration-mcp"},"status":"DEPLOYING"}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(api.Close)
+
+	handler := newMCPServerTestHandler(t, api.URL)
+	_, err := handler.CreateMCPServer(context.Background(), "integration-mcp", "", "github", "false", nil, nil)
+	if err == nil {
+		t.Fatal("CreateMCPServer() must fail when the inline integration name already exists")
+	}
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("error = %q, want it to explain the name collision", err.Error())
+	}
+	if got := functionCalls.Load(); got != 0 {
+		t.Fatalf("the MCP server must not be created after the collision, got %d create calls", got)
+	}
+}

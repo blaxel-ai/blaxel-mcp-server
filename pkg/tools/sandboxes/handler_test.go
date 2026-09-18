@@ -2,6 +2,7 @@ package sandboxes
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/blaxel-ai/toolkit/sdk"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 func TestSDKHandlerRejectsInvalidMemoryBeforeAPIRequest(t *testing.T) {
@@ -86,4 +88,34 @@ func newCreateSandboxHandlerTestServer(t *testing.T) (SandboxHandler, *atomic.In
 		t.Fatalf("create SDK handler: %v", err)
 	}
 	return handler, &requestCount
+}
+
+func TestCreateSandboxRegionReachesAPI(t *testing.T) {
+	var got struct {
+		Spec struct {
+			Region string `json:"region"`
+		} `json:"spec"`
+	}
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Error(err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"metadata":{"name":"regional"},"status":"DEPLOYING"}`))
+	}))
+	defer api.Close()
+	cfg := &config.Config{APIEndpoint: api.URL, RunEndpoint: api.URL, Workspace: "test", Credentials: sdk.Credentials{APIKey: "test-key"}}
+	handler, err := NewSDKHandler(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := server.NewMCPServer("test", "1")
+	RegisterSandboxTools(srv, handler, cfg)
+	result := callCreateSandboxTool(t, srv, map[string]any{"name": "regional", "region": "us-was-1"})
+	if result.IsError {
+		t.Fatal(toolResultText(result))
+	}
+	if got.Spec.Region != "us-was-1" {
+		t.Fatalf("region lost: %q", got.Spec.Region)
+	}
 }

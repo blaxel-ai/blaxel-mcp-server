@@ -330,6 +330,7 @@ func toolNameRequiresReadOnlyHint(name string) bool {
 		name == "local_quick_start_guide"
 }
 
+// Every write tool requires confirmation under the directory review criteria.
 func toolNameRequiresDestructiveHint(name string) bool {
 	for _, exactName := range []string{
 		"create_integration",

@@ -191,3 +191,17 @@ func toolResultText(result *mcp.CallToolResult) string {
 	text, _ := result.Content[0].(mcp.TextContent)
 	return text.Text
 }
+
+func TestExplicitRegionNeverFallsBackToDefault(t *testing.T) {
+	for _, region := range []any{nil, "", "  ", " us-was-1", 7, "us-was-1"} {
+		srv, handler := newCreateSandboxToolTestServer()
+		result := callCreateSandboxTool(t, srv, map[string]any{"name": "regional", "region": region})
+		// This legacy handler cannot honor a region, including a valid one.
+		if !result.IsError || !strings.Contains(toolResultText(result), "region") {
+			t.Fatalf("expected region error for %#v: %s", region, toolResultText(result))
+		}
+		if len(handler.createCalls) != 0 {
+			t.Fatal("explicit region silently fell back")
+		}
+	}
+}

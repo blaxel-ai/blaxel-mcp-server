@@ -3,6 +3,7 @@ package sandboxes
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -15,6 +16,24 @@ type SandboxHandler interface {
 	GetSandbox(ctx context.Context, name string) ([]byte, error)
 	CreateSandbox(ctx context.Context, name, image string, memory float64, ports, env string) ([]byte, error)
 	DeleteSandbox(ctx context.Context, name string) ([]byte, error)
+}
+
+// RegionalSandboxHandler adds explicit placement without breaking legacy handlers.
+type RegionalSandboxHandler interface {
+	CreateSandboxInRegion(ctx context.Context, name, image string, memory float64, ports, env, region string) ([]byte, error)
+}
+
+// ParseRegionArgument rejects malformed explicit placement instead of using a default.
+func ParseRegionArgument(args map[string]any) (string, error) {
+	raw, exists := args["region"]
+	if !exists {
+		return "", nil
+	}
+	region, ok := raw.(string)
+	if !ok || region == "" || strings.TrimSpace(region) != region {
+		return "", fmt.Errorf("region must be a non-empty region identifier")
+	}
+	return region, nil
 }
 
 // SandboxHandlerWithReadOnly extends SandboxHandler with readonly capability
@@ -42,7 +61,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 	listSandboxesTool := mcp.NewTool("list_sandboxes",
 		mcp.WithToolTitle("List Sandboxes"),
 		mcp.WithTitleAnnotation("List Sandboxes"),
-		mcp.WithDescription("List all sandboxes in the workspace"),
+		mcp.WithDescription("List the Blaxel sandboxes in the workspace with each sandbox's status, image and resources. Pass filter to keep only sandboxes whose name contains a case-insensitive substring. Use this to find the sandbox name the run_sandbox_command and process tools need. See https://docs.blaxel.ai/Sandboxes/Overview."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(true),
@@ -74,7 +93,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 	getSandboxTool := mcp.NewTool("get_sandbox",
 		mcp.WithToolTitle("Get Sandbox"),
 		mcp.WithTitleAnnotation("Get Sandbox"),
-		mcp.WithDescription("Get details of a specific sandbox"),
+		mcp.WithDescription("Get one Blaxel sandbox by name, returning its full definition: image, resources, exposed ports, volumes, expiration and current status. Call this to confirm a sandbox is running before executing commands in it. See https://docs.blaxel.ai/Sandboxes/Overview."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(true),
@@ -112,7 +131,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 		createSandboxTool := mcp.NewTool("create_sandbox",
 			mcp.WithToolTitle("Create Sandbox"),
 			mcp.WithTitleAnnotation("Create Sandbox"),
-			mcp.WithDescription("Create a new sandbox"),
+			mcp.WithDescription("Create a Blaxel sandbox: an isolated environment you can run commands in, with an optional image, exposed ports and environment variables. Use run_sandbox_command once it is running. See https://docs.blaxel.ai/Sandboxes/Overview."),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(false),
@@ -130,6 +149,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 				mcp.Max(262144),
 				mcp.DefaultNumber(1024),
 			),
+			mcp.WithString("region", mcp.Description("Optional deployment region, for example us-was-1. Omit to use the workspace default.")),
 			mcp.WithString("ports", mcp.Description("Ports to expose from the sandbox, separated by commas (eg. 8080,8081)")),
 			mcp.WithString("env", mcp.Description("Environment variables to set in the sandbox, separated by commas (eg. FOO=bar,BAR=baz)")),
 			mcp.WithString("workspace",
@@ -144,6 +164,11 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 				if err := validateSandboxMemory(rawMemory); err != nil {
 					return mcp.NewToolResultError(err.Error()), nil
 				}
+			}
+
+			region, err := ParseRegionArgument(request.GetArguments())
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
 			}
 
 			var args createSandboxArguments
@@ -170,7 +195,16 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 			if args.Memory != nil {
 				memory = *args.Memory
 			}
-			result, err := activeHandler.CreateSandbox(ctx, args.Name, args.Image, memory, args.Ports, args.Env)
+			var result []byte
+			if region != "" {
+				regional, ok := activeHandler.(RegionalSandboxHandler)
+				if !ok {
+					return mcp.NewToolResultError("explicit region is not supported by this sandbox handler"), nil
+				}
+				result, err = regional.CreateSandboxInRegion(ctx, args.Name, args.Image, memory, args.Ports, args.Env, region)
+			} else {
+				result, err = activeHandler.CreateSandbox(ctx, args.Name, args.Image, memory, args.Ports, args.Env)
+			}
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -182,7 +216,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 		deleteSandboxTool := mcp.NewTool("delete_sandbox",
 			mcp.WithToolTitle("Delete Sandbox"),
 			mcp.WithTitleAnnotation("Delete Sandbox"),
-			mcp.WithDescription("Delete a sandbox by name"),
+			mcp.WithDescription("Permanently delete a Blaxel sandbox by name, discarding its filesystem and any processes still running in it. See https://docs.blaxel.ai/Sandboxes/Overview."),
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
 			mcp.WithIdempotentHintAnnotation(false),

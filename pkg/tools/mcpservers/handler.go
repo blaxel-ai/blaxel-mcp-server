@@ -189,12 +189,17 @@ func (h *SDKHandler) CreateMCPServer(ctx context.Context, name, integrationConne
 		}
 
 		if integrationResp.StatusCode() >= 400 {
+			// A 409 means an integration of this name already exists. Attaching
+			// it would bind the new MCP server to someone else's credentials
+			// and silently discard the ones the caller supplied, so the
+			// collision is an error -- the same choice create_model_api makes.
 			if integrationResp.StatusCode() == 409 {
-				// Integration might already exist, try to use it
-				logger.Printf("Integration '%s' already exists, will attempt to use it", integrationName)
-			} else {
-				return nil, fmt.Errorf("failed to create integration with status %d", integrationResp.StatusCode())
+				return nil, fmt.Errorf(
+					"integration connection %q already exists: pass its name to reuse it deliberately, or choose a different integration name",
+					integrationName,
+				)
 			}
+			return nil, fmt.Errorf("failed to create integration with status %d", integrationResp.StatusCode())
 		}
 	}
 

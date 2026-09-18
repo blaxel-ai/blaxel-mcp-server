@@ -417,8 +417,12 @@ type runtimeToolCall struct {
 }
 
 type recordingRuntimeHandler struct {
-	agentCalls []runtimeToolCall
-	modelCalls []runtimeToolCall
+	agentCalls   []runtimeToolCall
+	modelCalls   []runtimeToolCall
+	sandboxCalls []runtimeToolCall
+	// sandboxResponse overrides the sandbox reply when set, so a test can
+	// stand in a realistic multi-line process log.
+	sandboxResponse string
 }
 
 func (h *recordingRuntimeHandler) RunAgent(ctx context.Context, name, body, path string) (string, error) {
@@ -436,6 +440,10 @@ func (h *recordingRuntimeHandler) RunModel(ctx context.Context, name, body, path
 }
 
 func (h *recordingRuntimeHandler) RunSandbox(ctx context.Context, name, body, method, path string) (string, error) {
+	h.sandboxCalls = append(h.sandboxCalls, runtimeToolCall{name: name, body: body, path: path, method: method})
+	if h.sandboxResponse != "" {
+		return h.sandboxResponse, nil
+	}
 	return `{"ok":true}`, nil
 }
 
@@ -541,4 +549,103 @@ func newSDKHandlerCapture(t *testing.T, resourceType, resourceName, runtimePath 
 		blaxelClient: &client,
 		cfg:          &config.Config{Workspace: "fixture-workspace"},
 	}, requests
+}
+
+// A long-running process can produce a log far larger than a caller's context
+// window, and the sandbox logs endpoint has no server-side limit, so the tail
+// argument is the only way to read just the recent output.
+func TestGetSandboxProcessLogsTailTrimsToTheLastLines(t *testing.T) {
+	logLines := make([]string, 0, 500)
+	for i := 1; i <= 500; i++ {
+		logLines = append(logLines, fmt.Sprintf("line %d", i))
+	}
+	fullLog := strings.Join(logLines, "\n")
+
+	for _, tc := range []struct {
+		name     string
+		tail     any
+		wantText string
+	}{
+		{
+			name:     "omitted returns the whole log",
+			tail:     nil,
+			wantText: fullLog,
+		},
+		{
+			name:     "string tail trims",
+			tail:     "3",
+			wantText: "[showing the last 3 of 500 log lines]\nline 498\nline 499\nline 500",
+		},
+		{
+			name:     "json number tail trims",
+			tail:     float64(2),
+			wantText: "[showing the last 2 of 500 log lines]\nline 499\nline 500",
+		},
+		{
+			name:     "tail larger than the log returns the whole log untouched",
+			tail:     "9000",
+			wantText: fullLog,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mcpServer, handler := newRuntimeToolTestServer(t)
+			handler.sandboxResponse = fullLog
+
+			args := map[string]any{"name": "sbx", "identifier": "1234"}
+			if tc.tail != nil {
+				args["tail"] = tc.tail
+			}
+
+			result := callRuntimeTool(t, mcpServer, "get_sandbox_process_logs", args)
+			if result.IsError {
+				t.Fatalf("get_sandbox_process_logs returned an error result: %s", toolResultText(result))
+			}
+			if got := toolResultText(result); got != tc.wantText {
+				t.Fatalf("log text = %q, want %q", got, tc.wantText)
+			}
+			// Trimming happens client-side; the request itself is unchanged.
+			if len(handler.sandboxCalls) != 1 {
+				t.Fatalf("sandbox calls = %d, want 1", len(handler.sandboxCalls))
+			}
+			if path := handler.sandboxCalls[0].path; path != "/process/1234/logs" {
+				t.Fatalf("sandbox path = %q, want /process/1234/logs", path)
+			}
+		})
+	}
+}
+
+// A bad tail must be reported instead of being silently read as "whole log",
+// which would hand the caller exactly the oversized response it asked to avoid.
+func TestGetSandboxProcessLogsRejectsUnusableTail(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		tail    any
+		wantMsg string
+	}{
+		{name: "zero", tail: "0", wantMsg: "pass a positive number of lines"},
+		{name: "negative", tail: "-5", wantMsg: "pass a positive number of lines"},
+		{name: "fractional", tail: float64(2.5), wantMsg: "pass a whole number of lines"},
+		{name: "not a number", tail: "all", wantMsg: `invalid tail "all"`},
+		{name: "wrong type", tail: true, wantMsg: "expected a positive whole number of lines"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mcpServer, handler := newRuntimeToolTestServer(t)
+			handler.sandboxResponse = "line 1\nline 2"
+
+			result := callRuntimeTool(t, mcpServer, "get_sandbox_process_logs", map[string]any{
+				"name":       "sbx",
+				"identifier": "1234",
+				"tail":       tc.tail,
+			})
+			if !result.IsError {
+				t.Fatalf("tail=%v was accepted; result=%s", tc.tail, toolResultText(result))
+			}
+			if got := toolResultText(result); !strings.Contains(got, tc.wantMsg) {
+				t.Fatalf("error = %q, want it to contain %q", got, tc.wantMsg)
+			}
+			if len(handler.sandboxCalls) != 0 {
+				t.Fatalf("sandbox was called %d times; an unusable tail must fail before the request", len(handler.sandboxCalls))
+			}
+		})
+	}
 }

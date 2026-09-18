@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -85,7 +87,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	runAgentTool := mcp.NewTool("run_agent",
 		mcp.WithToolTitle("Run Agent"),
 		mcp.WithTitleAnnotation("Run Agent"),
-		mcp.WithDescription("Invoke a Blaxel agent with message shorthand or an arbitrary JSON body/path; see https://docs.blaxel.ai/Agents/Run-an-agent."),
+		mcp.WithDescription("Invoke a Blaxel agent with message shorthand or an arbitrary JSON body/path; see https://docs.blaxel.ai/Agents/Query-agents."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithIdempotentHintAnnotation(false),
@@ -169,7 +171,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	runJobTool := mcp.NewTool("run_job",
 		mcp.WithToolTitle("Run Job"),
 		mcp.WithTitleAnnotation("Run Job"),
-		mcp.WithDescription("Trigger or run a job"),
+		mcp.WithDescription("Start an execution of a deployed Blaxel batch job, optionally with input parameters. Returns the accepted execution, not its result: the job keeps running after this tool returns, and these tools cannot read a single execution's outcome. See https://docs.blaxel.ai/Jobs/Overview."),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithIdempotentHintAnnotation(false),
@@ -309,7 +311,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			mcp.Description("Optional maximum restart count when restartOnFailure is true"),
 		),
 		mcp.WithBoolean("keepAlive",
-			mcp.Description("Whether to keep the process alive after the initial command completes"),
+			mcp.Description("Whether to keep the sandbox awake while this process runs, preventing automatic standby"),
 			mcp.DefaultBool(false),
 		),
 		mcp.WithString("workspace",
@@ -396,7 +398,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	getSandboxProcessLogsTool := mcp.NewTool("get_sandbox_process_logs",
 		mcp.WithToolTitle("Get Sandbox Process Logs"),
 		mcp.WithTitleAnnotation("Get Sandbox Process Logs"),
-		mcp.WithDescription("Get stdout and stderr logs for a Blaxel sandbox process with GET /process/{identifier}/logs. See https://docs.blaxel.ai/Sandboxes/Processes."),
+		mcp.WithDescription("Get stdout and stderr logs for a Blaxel sandbox process with GET /process/{identifier}/logs. Returns the whole log by default, which for a long-running process can be large; pass tail to read only the most recent lines. See https://docs.blaxel.ai/Sandboxes/Processes."),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
 		mcp.WithIdempotentHintAnnotation(true),
@@ -409,6 +411,9 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			mcp.Required(),
 			mcp.Description("Process PID or process name"),
 		),
+		mcp.WithString("tail",
+			mcp.Description("Return only the last N lines of the log, as a positive integer. Omit to return the whole log. Use this when you only need recent output, or when a full log would be too large to read."),
+		),
 		mcp.WithString("workspace",
 			mcp.Description("Optional workspace name to override the default workspace"),
 		),
@@ -419,7 +424,17 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 		if errResult != nil {
 			return errResult, nil
 		}
-		return callSandbox(ctx, handler, cfg, request.GetString("workspace", ""), name, "", "GET", "/process/"+url.PathEscape(identifier)+"/logs")
+		tail, err := sandboxLogTailArgument(request)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		result, callErr := callSandbox(ctx, handler, cfg, request.GetString("workspace", ""), name, "", "GET", "/process/"+url.PathEscape(identifier)+"/logs")
+		if callErr != nil || tail == 0 || result == nil || result.IsError {
+			return result, callErr
+		}
+
+		return tailToolResultText(result, tail), nil
 	})
 
 	stopSandboxProcessTool := mcp.NewTool("stop_sandbox_process",
@@ -526,4 +541,66 @@ func callSandbox(ctx context.Context, handler RuntimeHandler, cfg *config.Config
 	}
 
 	return mcp.NewToolResultText(result), nil
+}
+
+// sandboxLogTailArgument reads the optional `tail` argument. It is declared as
+// a string in the schema because mcp-go's GetString collapses an omitted value
+// and a JSON number to the same empty result, so an explicitly invalid value
+// could not otherwise be told apart from omission. 0 means "return everything".
+func sandboxLogTailArgument(request mcp.CallToolRequest) (int, error) {
+	raw, ok := request.GetArguments()["tail"]
+	if !ok || raw == nil {
+		return 0, nil
+	}
+
+	var tail int
+	switch value := raw.(type) {
+	case string:
+		if strings.TrimSpace(value) == "" {
+			return 0, nil
+		}
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil {
+			return 0, fmt.Errorf("invalid tail %q: pass a positive whole number of lines", value)
+		}
+		tail = parsed
+	case float64:
+		// JSON numbers decode to float64. Reject a fractional line count
+		// rather than silently truncating it.
+		if value != float64(int(value)) {
+			return 0, fmt.Errorf("invalid tail %v: pass a whole number of lines", value)
+		}
+		tail = int(value)
+	default:
+		return 0, fmt.Errorf("invalid tail: expected a positive whole number of lines, but got %T", raw)
+	}
+
+	if tail <= 0 {
+		return 0, fmt.Errorf("invalid tail %d: pass a positive number of lines, or omit tail to return the whole log", tail)
+	}
+	return tail, nil
+}
+
+// tailToolResultText rewrites a text tool result down to its last `tail`
+// lines, prefixed with a note so the caller cannot mistake a trimmed log for
+// the whole one. A result already shorter than the request is returned as-is.
+func tailToolResultText(result *mcp.CallToolResult, tail int) *mcp.CallToolResult {
+	if len(result.Content) != 1 {
+		return result
+	}
+	text, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		return result
+	}
+
+	lines := strings.Split(strings.TrimRight(text.Text, "\n"), "\n")
+	if len(lines) <= tail {
+		return result
+	}
+
+	trimmed := lines[len(lines)-tail:]
+	return mcp.NewToolResultText(fmt.Sprintf(
+		"[showing the last %d of %d log lines]\n%s",
+		tail, len(lines), strings.Join(trimmed, "\n"),
+	))
 }

@@ -1,6 +1,7 @@
 package users
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,7 +10,6 @@ import (
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/blaxel-ai/toolkit/sdk"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // SDKHandler implements UserHandler using the SDK client
@@ -209,28 +209,36 @@ func (h *SDKHandler) InviteUser(ctx context.Context, email, role string) ([]byte
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
 
-	emailType := openapi_types.Email(email)
-	inviteData := sdk.InviteWorkspaceUserJSONRequestBody{
-		Email: &emailType,
+	// Validate before sending, and mirror the roles the invite endpoint
+	// itself accepts.
+	if role == "" {
+		role = "member"
+	}
+	if role != "member" && role != "admin" && role != "owner" {
+		return nil, fmt.Errorf("invalid role %q: invite accepts member, admin or owner", role)
 	}
 
-	resp, err := h.sdkClient.InviteWorkspaceUserWithResponse(ctx, inviteData)
+	// Sent as a raw body rather than InviteWorkspaceUserJSONRequestBody: the
+	// generated request type carries only email, because the OpenAPI request
+	// body for this endpoint omits role even though the endpoint binds and
+	// honors it. Building the body here is what makes a requested role
+	// actually take effect; drop this once the generated type has the field.
+	body, err := json.Marshal(map[string]string{"email": email, "role": role})
+	if err != nil {
+		return nil, fmt.Errorf("failed to build invite request: %w", err)
+	}
+
+	resp, err := h.sdkClient.InviteWorkspaceUserWithBodyWithResponse(ctx, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to invite user: %w", err)
 	}
 
-	// Check response status
 	if resp.StatusCode() >= 200 && resp.StatusCode() < 300 {
-		message := fmt.Sprintf("Successfully invited user '%s' to the workspace", email)
-
-		// If role was requested but not set on invite, mention it needs to be set separately
-		if role != "" {
-			message += fmt.Sprintf(". Role '%s' can be set using update_workspace_user_role after the user accepts the invitation", role)
-		}
-
 		result := map[string]interface{}{
 			"success": true,
-			"message": message,
+			"message": fmt.Sprintf("Invited '%s' to the workspace as %s. The role applies once the invitation is accepted.", email, role),
+			"email":   email,
+			"role":    role,
 		}
 
 		jsonData, err := json.MarshalIndent(result, "", "  ")
@@ -243,6 +251,12 @@ func (h *SDKHandler) InviteUser(ctx context.Context, email, role string) ([]byte
 
 	if resp.StatusCode() == 409 {
 		return nil, fmt.Errorf("user '%s' is already in the workspace or has a pending invitation", email)
+	}
+
+	// 403 is the role-hierarchy check: the caller cannot grant a role above
+	// their own. Say which role was refused so the caller can retry lower.
+	if resp.StatusCode() == 403 {
+		return nil, fmt.Errorf("not allowed to invite '%s' as %s: your own workspace role is not privileged enough to grant it", email, role)
 	}
 
 	return nil, fmt.Errorf("failed to invite user with status %d", resp.StatusCode())

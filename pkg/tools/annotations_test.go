@@ -15,7 +15,10 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-func TestCreateAndInviteAnnotationsAreDestructive(t *testing.T) {
+// create_integration, create_model_api and create_mcp_server upsert: creating
+// over an existing name replaces that resource rather than failing, so the
+// create group stays flagged destructive.
+func TestCreateAnnotationsAreDestructive(t *testing.T) {
 	s := newAnnotationTestServer()
 
 	for _, name := range []string{
@@ -24,12 +27,17 @@ func TestCreateAndInviteAnnotationsAreDestructive(t *testing.T) {
 		"create_model_api",
 		"create_sandbox",
 		"create_service_account",
-		"invite_workspace_user",
 	} {
 		t.Run(name, func(t *testing.T) {
 			assertMutationAnnotations(t, s, name, true)
 		})
 	}
+}
+
+// Invitations change workspace access and send an email. Anthropic requires
+// destructiveHint for all tools that modify data, including additive writes.
+func TestInviteAnnotationRequiresConfirmation(t *testing.T) {
+	assertMutationAnnotations(t, newAnnotationTestServer(), "invite_workspace_user", true)
 }
 
 func TestDestructiveMutationAnnotationsRemainDestructive(t *testing.T) {
