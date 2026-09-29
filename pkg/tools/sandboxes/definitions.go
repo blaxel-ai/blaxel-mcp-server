@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -59,6 +60,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 
 	// List sandboxes tool
 	listSandboxesTool := mcp.NewTool("list_sandboxes",
+		tools.OutputSchema(ListSandboxesOutputSchema()),
 		mcp.WithToolTitle("List Sandboxes"),
 		mcp.WithTitleAnnotation("List Sandboxes"),
 		mcp.WithDescription("List the Blaxel sandboxes in the workspace with each sandbox's status, image and resources. Pass filter to keep only sandboxes whose name contains a case-insensitive substring. Use this to find the sandbox name the run_sandbox_command and process tools need. See https://docs.blaxel.ai/Sandboxes/Overview."),
@@ -86,11 +88,12 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Get sandbox tool
 	getSandboxTool := mcp.NewTool("get_sandbox",
+		tools.OutputSchema(getSandboxOutputSchema()),
 		mcp.WithToolTitle("Get Sandbox"),
 		mcp.WithTitleAnnotation("Get Sandbox"),
 		mcp.WithDescription("Get one Blaxel sandbox by name, returning its full definition: image, resources, exposed ports, volumes, expiration and current status. Call this to confirm a sandbox is running before executing commands in it. See https://docs.blaxel.ai/Sandboxes/Overview."),
@@ -122,13 +125,14 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create sandbox tool
 		createSandboxTool := mcp.NewTool("create_sandbox",
+			tools.OutputSchema(createSandboxOutputSchema()),
 			mcp.WithToolTitle("Create Sandbox"),
 			mcp.WithTitleAnnotation("Create Sandbox"),
 			mcp.WithDescription("Create a Blaxel sandbox: an isolated environment you can run commands in, with an optional image, exposed ports and environment variables. Use run_sandbox_command once it is running. See https://docs.blaxel.ai/Sandboxes/Overview."),
@@ -209,11 +213,12 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 
 		// Delete sandbox tool
 		deleteSandboxTool := mcp.NewTool("delete_sandbox",
+			tools.OutputSchema(deleteSandboxOutputSchema()),
 			mcp.WithToolTitle("Delete Sandbox"),
 			mcp.WithTitleAnnotation("Delete Sandbox"),
 			mcp.WithDescription("Permanently delete a Blaxel sandbox by name, discarding its filesystem and any processes still running in it. See https://docs.blaxel.ai/Sandboxes/Overview."),
@@ -245,7 +250,7 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 	}
 }

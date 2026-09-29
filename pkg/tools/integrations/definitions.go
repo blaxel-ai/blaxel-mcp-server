@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -31,6 +32,7 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 
 	// List integrations tool
 	listIntegrationsTool := mcp.NewTool("list_integrations",
+		tools.OutputSchema(listIntegrationsOutputSchema()),
 		mcp.WithToolTitle("List Integrations"),
 		mcp.WithTitleAnnotation("List Integrations"),
 		mcp.WithDescription("List the integration connections in the workspace, each holding the credentials and configuration for one external provider. Pass filter to keep only connections whose name contains a case-insensitive substring. See https://docs.blaxel.ai/Integrations."),
@@ -58,11 +60,12 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Get integration tool
 	getIntegrationTool := mcp.NewTool("get_integration",
+		tools.OutputSchema(getIntegrationOutputSchema()),
 		mcp.WithToolTitle("Get Integration"),
 		mcp.WithTitleAnnotation("Get Integration"),
 		mcp.WithDescription("Get one integration connection by name, returning the provider it targets and its non-secret configuration. Secret values are replaced with [REDACTED] and cannot be read back through MCP. See https://docs.blaxel.ai/Integrations."),
@@ -94,13 +97,14 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create integration tool
 		createIntegrationTool := mcp.NewTool("create_integration",
+			tools.OutputSchema(createIntegrationOutputSchema()),
 			mcp.WithToolTitle("Create Integration"),
 			mcp.WithTitleAnnotation("Create Integration"),
 			mcp.WithDescription("Create an integration connection: the stored credentials and configuration that lets Blaxel resources reach one external provider. Secrets are write-only and cannot be read back through MCP. See https://docs.blaxel.ai/Integrations."),
@@ -177,11 +181,12 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 
 		// Delete integration tool
 		deleteIntegrationTool := mcp.NewTool("delete_integration",
+			tools.OutputSchema(deleteIntegrationOutputSchema()),
 			mcp.WithToolTitle("Delete Integration"),
 			mcp.WithTitleAnnotation("Delete Integration"),
 			mcp.WithDescription("Permanently delete an integration connection by name, along with the credentials it stores. Model APIs and MCP servers still referencing it will fail to authenticate. See https://docs.blaxel.ai/Integrations."),
@@ -213,7 +218,7 @@ func RegisterIntegrationTools(s *server.MCPServer, handler IntegrationHandler, c
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 	}
 }

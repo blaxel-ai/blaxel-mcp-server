@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -30,6 +31,7 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler, cfg *config.Confi
 
 	// List jobs tool
 	listJobsTool := mcp.NewTool("list_jobs",
+		tools.OutputSchema(listJobsOutputSchema()),
 		mcp.WithToolTitle("List Jobs"),
 		mcp.WithTitleAnnotation("List Jobs"),
 		mcp.WithDescription("List the Blaxel batch jobs in the workspace with each job's status, container image and resources. Pass status to keep only jobs in one state, using the exact status string that get_job reports. See https://docs.blaxel.ai/Jobs/Overview."),
@@ -57,11 +59,12 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler, cfg *config.Confi
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Get job tool
 	getJobTool := mcp.NewTool("get_job",
+		tools.OutputSchema(getJobOutputSchema()),
 		mcp.WithToolTitle("Get Job"),
 		mcp.WithTitleAnnotation("Get Job"),
 		mcp.WithDescription("Get one Blaxel batch job, identified by the id argument, which is the job name that list_jobs reports. Returns its full definition: container image, resources, environment, triggers and current status. This describes the deployed job, not the outcome of an individual execution. See https://docs.blaxel.ai/Jobs/Overview."),
@@ -93,13 +96,14 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler, cfg *config.Confi
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Delete job tool
 		deleteJobTool := mcp.NewTool("delete_job",
+			tools.OutputSchema(deleteJobOutputSchema()),
 			mcp.WithToolTitle("Delete Job"),
 			mcp.WithTitleAnnotation("Delete Job"),
 			mcp.WithDescription("Permanently delete a Blaxel batch job, identified by the id argument, which is the job name that list_jobs reports. Executions already running are not waited for. See https://docs.blaxel.ai/Jobs/Overview."),
@@ -131,7 +135,7 @@ func RegisterJobTools(s *server.MCPServer, handler JobHandler, cfg *config.Confi
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 	}
 }

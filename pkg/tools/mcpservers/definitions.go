@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -32,6 +33,7 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 
 	// List MCP servers tool
 	listMCPServersTool := mcp.NewTool("list_mcp_servers",
+		tools.OutputSchema(listMCPServersOutputSchema()),
 		mcp.WithToolTitle("List MCP Servers"),
 		mcp.WithTitleAnnotation("List MCP Servers"),
 		mcp.WithDescription("List the MCP servers deployed in the workspace. MCP servers are Blaxel functions with runtime type mcp, so a function that is not an MCP server is not listed. Pass filter to keep only servers whose name contains a case-insensitive substring. See https://docs.blaxel.ai/Functions/Overview."),
@@ -59,11 +61,12 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Get MCP server tool
 	getMCPServerTool := mcp.NewTool("get_mcp_server",
+		tools.OutputSchema(getMCPServerOutputSchema()),
 		mcp.WithToolTitle("Get MCP Server"),
 		mcp.WithTitleAnnotation("Get MCP Server"),
 		mcp.WithDescription("Get one deployed MCP server by name, returning its full definition: the integration connection it authenticates through, its runtime settings and its current status. Fails if the named function is not an MCP server. See https://docs.blaxel.ai/Functions/Overview."),
@@ -95,13 +98,14 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create MCP server tool
 		createMCPServerTool := mcp.NewTool("create_mcp_server",
+			tools.OutputSchema(createMCPServerOutputSchema()),
 			mcp.WithToolTitle("Create MCP Server"),
 			mcp.WithTitleAnnotation("Create MCP Server"),
 			mcp.WithDescription("Deploy an MCP server in the workspace, either against an existing integration connection or by supplying an integration type and credentials to create one inline. If the server fails to create, an inline integration created for it is rolled back. See https://docs.blaxel.ai/Functions/Overview."),
@@ -193,11 +197,12 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 
 		// Delete MCP server tool
 		deleteMCPServerTool := mcp.NewTool("delete_mcp_server",
+			tools.OutputSchema(deleteMCPServerOutputSchema()),
 			mcp.WithToolTitle("Delete MCP Server"),
 			mcp.WithTitleAnnotation("Delete MCP Server"),
 			mcp.WithDescription("Permanently delete a deployed MCP server by name. Clients configured against it stop working; the integration connection it used is left in place. See https://docs.blaxel.ai/Functions/Overview."),
@@ -247,7 +252,7 @@ func RegisterMCPServerTools(s *server.MCPServer, handler MCPServerHandler, cfg *
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 	}
 }

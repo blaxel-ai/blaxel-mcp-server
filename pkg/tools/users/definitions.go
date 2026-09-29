@@ -6,6 +6,7 @@ import (
 	"net/mail"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -33,6 +34,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 
 	// List workspace users tool
 	listUsersTool := mcp.NewTool("list_workspace_users",
+		tools.OutputSchema(listWorkspaceUsersOutputSchema()),
 		mcp.WithToolTitle("List Workspace Users"),
 		mcp.WithTitleAnnotation("List Workspace Users"),
 		mcp.WithDescription("List the members of the workspace with each member's email, name, role and whether they have accepted their invitation. Pass filter to keep only members whose email or full name contains a case-insensitive substring. See https://docs.blaxel.ai/Security/Workspace-access-control."),
@@ -60,11 +62,12 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Get user tool
 	getUserTool := mcp.NewTool("get_workspace_user",
+		tools.OutputSchema(getWorkspaceUserOutputSchema()),
 		mcp.WithToolTitle("Get Workspace User"),
 		mcp.WithTitleAnnotation("Get Workspace User"),
 		mcp.WithDescription("Get one workspace member by email, returning their role, name and whether the invitation is still pending. Call this before update_workspace_user_role to see the member's current role. See https://docs.blaxel.ai/Security/Workspace-access-control."),
@@ -96,13 +99,14 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Invite user tool
 		inviteUserTool := mcp.NewTool("invite_workspace_user",
+			tools.OutputSchema(inviteWorkspaceUserOutputSchema()),
 			mcp.WithToolTitle("Invite Workspace User"),
 			mcp.WithTitleAnnotation("Invite Workspace User"),
 			mcp.WithDescription("Invite someone to the workspace by email, optionally with the role they should get. They receive an invitation email and gain access only after accepting. You cannot grant a role above your own. See https://docs.blaxel.ai/Security/Workspace-access-control."),
@@ -145,11 +149,12 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 
 		// Update user role tool
 		updateUserRoleTool := mcp.NewTool("update_workspace_user_role",
+			tools.OutputSchema(updateWorkspaceUserRoleOutputSchema()),
 			mcp.WithToolTitle("Update Workspace User Role"),
 			mcp.WithTitleAnnotation("Update Workspace User Role"),
 			mcp.WithDescription("Change an existing workspace member's role, identified by email. Accepts member and admin; workspace ownership cannot be transferred this way. Works on a pending invitation as well as an accepted member. See https://docs.blaxel.ai/Security/Workspace-access-control."),
@@ -191,11 +196,12 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 
 		// Remove user tool
 		removeUserTool := mcp.NewTool("remove_workspace_user",
+			tools.OutputSchema(removeWorkspaceUserOutputSchema()),
 			mcp.WithToolTitle("Remove Workspace User"),
 			mcp.WithTitleAnnotation("Remove Workspace User"),
 			mcp.WithDescription("Remove someone from the workspace by email, revoking a pending invitation if they never accepted. They immediately lose access to every resource in the workspace. See https://docs.blaxel.ai/Security/Workspace-access-control."),
@@ -227,7 +233,7 @@ func RegisterUserTools(s *server.MCPServer, handler UserHandler, cfg *config.Con
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 	}
 }

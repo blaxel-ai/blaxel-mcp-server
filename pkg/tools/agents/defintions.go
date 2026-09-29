@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -29,6 +30,7 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler, cfg *config.C
 	isReadOnly := hasReadOnly && readOnlyHandler.IsReadOnly()
 	// List agents tool
 	listAgentsTool := mcp.NewTool("list_agents",
+		tools.OutputSchema(listAgentsOutputSchema()),
 		mcp.WithToolTitle("List Agents"),
 		mcp.WithTitleAnnotation("List Agents"),
 		mcp.WithDescription("List the Blaxel agents deployed in the workspace with each agent's status and runtime settings. Pass filter to keep only agents whose name contains a case-insensitive substring. Use this to discover the agent name that run_agent and get_agent need. See https://docs.blaxel.ai/Agents/Overview."),
@@ -56,11 +58,12 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler, cfg *config.C
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Get agent tool
 	getAgentTool := mcp.NewTool("get_agent",
+		tools.OutputSchema(getAgentOutputSchema()),
 		mcp.WithToolTitle("Get Agent"),
 		mcp.WithTitleAnnotation("Get Agent"),
 		mcp.WithDescription("Get one Blaxel agent by name, returning its full definition: runtime, container image, resources, environment and current deployment status. Call this before run_agent when you need the agent's configuration or to confirm it is deployed. See https://docs.blaxel.ai/Agents/Overview."),
@@ -92,12 +95,13 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler, cfg *config.C
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Delete agent tool (only if not in readonly mode)
 	if !isReadOnly {
 		deleteAgentTool := mcp.NewTool("delete_agent",
+			tools.OutputSchema(deleteAgentOutputSchema()),
 			mcp.WithToolTitle("Delete Agent"),
 			mcp.WithTitleAnnotation("Delete Agent"),
 			mcp.WithDescription("Permanently delete a Blaxel agent by name. Calls to run_agent for that name stop working. This removes the deployed agent, not the source code it was deployed from. See https://docs.blaxel.ai/Agents/Overview."),
@@ -129,7 +133,7 @@ func RegisterAgentTools(s *server.MCPServer, handler AgentHandler, cfg *config.C
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 	}
 }

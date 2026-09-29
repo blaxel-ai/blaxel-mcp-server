@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -32,6 +33,7 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 
 	// List model APIs tool
 	listModelAPIsTool := mcp.NewTool("list_model_apis",
+		tools.OutputSchema(listModelAPIsOutputSchema()),
 		mcp.WithToolTitle("List Model APIs"),
 		mcp.WithTitleAnnotation("List Model APIs"),
 		mcp.WithDescription("List the Blaxel Model APIs available in the workspace, including both Blaxel-hosted models and external provider models connected through an integration. Pass filter to keep only models whose name contains a case-insensitive substring. Use this to find the model name run_model needs. See https://docs.blaxel.ai/Models/Overview."),
@@ -59,11 +61,12 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Get model API tool
 	getModelAPITool := mcp.NewTool("get_model_api",
+		tools.OutputSchema(getModelAPIOutputSchema()),
 		mcp.WithToolTitle("Get Model API"),
 		mcp.WithTitleAnnotation("Get Model API"),
 		mcp.WithDescription("Get one Blaxel Model API by name, returning the provider integration it is backed by, its runtime settings and its current status. See https://docs.blaxel.ai/Models/Overview."),
@@ -95,13 +98,14 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create model API tool
 		createModelAPITool := mcp.NewTool("create_model_api",
+			tools.OutputSchema(createModelAPIOutputSchema()),
 			mcp.WithToolTitle("Create Model API"),
 			mcp.WithTitleAnnotation("Create Model API"),
 			mcp.WithDescription("Create a Blaxel Model API, either against an existing integration connection or by supplying a provider and credentials to create one. Once deployed it is callable through run_model. See https://docs.blaxel.ai/Models/Overview."),
@@ -178,11 +182,12 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 
 		// Delete model API tool
 		deleteModelAPITool := mcp.NewTool("delete_model_api",
+			tools.OutputSchema(deleteModelAPIOutputSchema()),
 			mcp.WithToolTitle("Delete Model API"),
 			mcp.WithTitleAnnotation("Delete Model API"),
 			mcp.WithDescription("Permanently delete a Blaxel Model API by name. Calls to run_model for that name stop working; the provider account behind it is untouched. See https://docs.blaxel.ai/Models/Overview."),
@@ -232,7 +237,7 @@ func RegisterModelAPITools(s *server.MCPServer, handler ModelAPIHandler, cfg *co
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 	}
 }

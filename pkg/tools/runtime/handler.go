@@ -122,7 +122,7 @@ func (h *SDKHandler) RunJob(ctx context.Context, name, parameters string) (strin
 		return "", fmt.Errorf("job trigger failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	return fmt.Sprintf("Job triggered successfully:\n%s", formatJSONResponse(body)), nil
+	return jobTriggeredPrefix + formatJSONResponse(body), nil
 }
 
 // RunModel implements RuntimeHandler.RunModel
