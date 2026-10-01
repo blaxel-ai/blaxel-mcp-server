@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -32,6 +33,7 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 
 	// List service accounts tool
 	listServiceAccountsTool := mcp.NewTool("list_service_accounts",
+		tools.OutputSchema(listServiceAccountsOutputSchema()),
 		mcp.WithToolTitle("List Service Accounts"),
 		mcp.WithTitleAnnotation("List Service Accounts"),
 		mcp.WithDescription("List the service accounts in the workspace with each account's client ID, name and creation time. Client secrets are never returned by this tool; a secret is shown only once, when create_service_account mints it. Requires a workspace admin or owner. See https://docs.blaxel.ai/Security/Service-accounts."),
@@ -59,11 +61,12 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Get service account tool
 	getServiceAccountTool := mcp.NewTool("get_service_account",
+		tools.OutputSchema(getServiceAccountOutputSchema()),
 		mcp.WithToolTitle("Get Service Account"),
 		mcp.WithTitleAnnotation("Get Service Account"),
 		mcp.WithDescription("Get one service account by its client ID, returning its name, description and creation time. The client secret is not returned and cannot be read back after creation. Requires a workspace admin or owner. See https://docs.blaxel.ai/Security/Service-accounts."),
@@ -95,13 +98,14 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(string(result)), nil
+		return tools.StructuredResult(result), nil
 	})
 
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create service account tool
 		createServiceAccountTool := mcp.NewTool("create_service_account",
+			tools.OutputSchema(createServiceAccountOutputSchema()),
 			mcp.WithToolTitle("Create Service Account"),
 			mcp.WithTitleAnnotation("Create Service Account"),
 			mcp.WithDescription("Create a service account for machine access to the workspace and return its client ID plus a one-time client secret. The secret appears only in this response and cannot be retrieved again, so record it now if it is needed. Requires a workspace admin or owner. See https://docs.blaxel.ai/Security/Service-accounts."),
@@ -133,11 +137,12 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 
 		// Delete service account tool
 		deleteServiceAccountTool := mcp.NewTool("delete_service_account",
+			tools.OutputSchema(deleteServiceAccountOutputSchema()),
 			mcp.WithToolTitle("Delete Service Account"),
 			mcp.WithTitleAnnotation("Delete Service Account"),
 			mcp.WithDescription("Permanently delete a service account, identified by its client ID rather than its display name. Anything authenticating with its credentials immediately loses workspace access. Requires a workspace admin or owner. See https://docs.blaxel.ai/Security/Service-accounts."),
@@ -169,11 +174,12 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 
 		// Update service account tool
 		updateServiceAccountTool := mcp.NewTool("update_service_account",
+			tools.OutputSchema(updateServiceAccountOutputSchema()),
 			mcp.WithToolTitle("Update Service Account"),
 			mcp.WithTitleAnnotation("Update Service Account"),
 			mcp.WithDescription("Rename an existing service account, identified by its client ID. Its credentials and workspace access are unchanged. Requires a workspace admin or owner. See https://docs.blaxel.ai/Security/Service-accounts."),
@@ -213,7 +219,7 @@ func RegisterServiceAccountTools(s *server.MCPServer, handler ServiceAccountHand
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			return mcp.NewToolResultText(string(result)), nil
+			return tools.StructuredResult(result), nil
 		})
 	}
 }

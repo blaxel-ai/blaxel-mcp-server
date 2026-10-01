@@ -218,6 +218,11 @@ func assertHostedAnthropicToolReviewReadiness(t *testing.T, result *mcp.ListTool
 		if strings.HasPrefix(tool.Name, "local_") {
 			t.Errorf("hosted Anthropic toolset must not expose local-only tool %s", tool.Name)
 		}
+		// The OpenAI Plugins Directory recommends an outputSchema on every
+		// tool, and results must then carry matching structuredContent.
+		if tool.OutputSchema.Type != "object" {
+			t.Errorf("hosted tool %s must declare an object outputSchema, got type %q", tool.Name, tool.OutputSchema.Type)
+		}
 	}
 }
 

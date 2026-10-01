@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
+	"github.com/blaxel-ai/blaxel-mcp-server/pkg/tools"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -85,6 +86,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 
 	// Run/Chat with Agent
 	runAgentTool := mcp.NewTool("run_agent",
+		tools.OutputSchema(runAgentOutputSchema()),
 		mcp.WithToolTitle("Run Agent"),
 		mcp.WithTitleAnnotation("Run Agent"),
 		mcp.WithDescription("Invoke a Blaxel agent with message shorthand or an arbitrary JSON body/path; see https://docs.blaxel.ai/Agents/Query-agents."),
@@ -164,11 +166,12 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(result), nil
+		return tools.StructuredBodyResult(result), nil
 	})
 
 	// Trigger/Run Job
 	runJobTool := mcp.NewTool("run_job",
+		tools.OutputSchema(runJobOutputSchema()),
 		mcp.WithToolTitle("Run Job"),
 		mcp.WithTitleAnnotation("Run Job"),
 		mcp.WithDescription("Start an execution of a deployed Blaxel batch job, optionally with input parameters. Returns the accepted execution, not its result: the job keeps running after this tool returns, and these tools cannot read a single execution's outcome. See https://docs.blaxel.ai/Jobs/Overview."),
@@ -205,11 +208,12 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(result), nil
+		return runJobResult(result), nil
 	})
 
 	// Invoke/Run Model
 	runModelTool := mcp.NewTool("run_model",
+		tools.OutputSchema(runModelOutputSchema()),
 		mcp.WithToolTitle("Run Model"),
 		mcp.WithTitleAnnotation("Run Model"),
 		mcp.WithDescription("Invoke a Blaxel Model API with a POST request. The request body should follow the target model endpoint schema; see https://docs.blaxel.ai/Models/Query-a-model."),
@@ -262,11 +266,12 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(result), nil
+		return tools.StructuredBodyResult(result), nil
 	})
 
 	// Execute a command in a Sandbox process.
 	runSandboxCommandTool := mcp.NewTool("run_sandbox_command",
+		tools.OutputSchema(runSandboxCommandOutputSchema()),
 		mcp.WithToolTitle("Run Sandbox Command"),
 		mcp.WithTitleAnnotation("Run Sandbox Command"),
 		mcp.WithDescription("Execute a command in a Blaxel sandbox by creating a sandbox process with POST /process. See https://docs.blaxel.ai/Sandboxes/Processes."),
@@ -342,6 +347,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	})
 
 	listSandboxProcessesTool := mcp.NewTool("list_sandbox_processes",
+		tools.OutputSchema(listSandboxProcessesOutputSchema()),
 		mcp.WithToolTitle("List Sandbox Processes"),
 		mcp.WithTitleAnnotation("List Sandbox Processes"),
 		mcp.WithDescription("List running and completed processes in a Blaxel sandbox with GET /process. See https://docs.blaxel.ai/Sandboxes/Processes."),
@@ -367,6 +373,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	})
 
 	getSandboxProcessTool := mcp.NewTool("get_sandbox_process",
+		tools.OutputSchema(getSandboxProcessOutputSchema()),
 		mcp.WithToolTitle("Get Sandbox Process"),
 		mcp.WithTitleAnnotation("Get Sandbox Process"),
 		mcp.WithDescription("Get process status and metadata from a Blaxel sandbox with GET /process/{identifier}. See https://docs.blaxel.ai/Sandboxes/Processes."),
@@ -396,6 +403,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	})
 
 	getSandboxProcessLogsTool := mcp.NewTool("get_sandbox_process_logs",
+		tools.OutputSchema(getSandboxProcessLogsOutputSchema()),
 		mcp.WithToolTitle("Get Sandbox Process Logs"),
 		mcp.WithTitleAnnotation("Get Sandbox Process Logs"),
 		mcp.WithDescription("Get stdout and stderr logs for a Blaxel sandbox process with GET /process/{identifier}/logs. Returns the whole log by default, which for a long-running process can be large; pass tail to read only the most recent lines. See https://docs.blaxel.ai/Sandboxes/Processes."),
@@ -434,10 +442,11 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 			return result, callErr
 		}
 
-		return tailToolResultText(result, tail), nil
+		return tailSandboxLogsResult(result, tail), nil
 	})
 
 	stopSandboxProcessTool := mcp.NewTool("stop_sandbox_process",
+		tools.OutputSchema(stopSandboxProcessOutputSchema()),
 		mcp.WithToolTitle("Stop Sandbox Process"),
 		mcp.WithTitleAnnotation("Stop Sandbox Process"),
 		mcp.WithDescription("Gracefully stop a process in a Blaxel sandbox with DELETE /process/{identifier}. See https://docs.blaxel.ai/Sandboxes/Processes."),
@@ -467,6 +476,7 @@ func RegisterRuntimeTools(s *server.MCPServer, handler RuntimeHandler, cfg *conf
 	})
 
 	killSandboxProcessTool := mcp.NewTool("kill_sandbox_process",
+		tools.OutputSchema(killSandboxProcessOutputSchema()),
 		mcp.WithToolTitle("Kill Sandbox Process"),
 		mcp.WithTitleAnnotation("Kill Sandbox Process"),
 		mcp.WithDescription("Force-kill a process in a Blaxel sandbox with DELETE /process/{identifier}/kill. See https://docs.blaxel.ai/Sandboxes/Processes."),
@@ -540,7 +550,7 @@ func callSandbox(ctx context.Context, handler RuntimeHandler, cfg *config.Config
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	return mcp.NewToolResultText(result), nil
+	return tools.StructuredResult([]byte(result)), nil
 }
 
 // sandboxLogTailArgument reads the optional `tail` argument. It is declared as
@@ -579,6 +589,15 @@ func sandboxLogTailArgument(request mcp.CallToolRequest) (int, error) {
 		return 0, fmt.Errorf("invalid tail %d: pass a positive number of lines, or omit tail to return the whole log", tail)
 	}
 	return tail, nil
+}
+
+// tailSandboxLogsResult applies tail to both the text and the structured
+// content of a logs result.
+func tailSandboxLogsResult(result *mcp.CallToolResult, tail int) *mcp.CallToolResult {
+	structured := tailStructuredLogs(result.StructuredContent, tail)
+	trimmed := tailToolResultText(result, tail)
+	trimmed.StructuredContent = structured
+	return trimmed
 }
 
 // tailToolResultText rewrites a text tool result down to its last `tail`
