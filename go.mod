@@ -7,16 +7,16 @@ require (
 	github.com/blaxel-ai/toolkit v0.1.71
 	github.com/joho/godotenv v1.5.1
 	github.com/mark3labs/mcp-go v0.57.0
-	github.com/oapi-codegen/runtime v1.6.0
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 )
 
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
-	github.com/getkin/kin-openapi v0.146.0 // indirect
+	github.com/getkin/kin-openapi v0.149.0 // indirect
 	github.com/go-openapi/jsonpointer v1.0.0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/oapi-codegen/runtime v1.6.0 // indirect
 	github.com/oasdiff/yaml v0.1.1 // indirect
 	github.com/oasdiff/yaml3 v0.0.14 // indirect
 	github.com/spf13/cast v1.8.0 // indirect
