@@ -2,6 +2,8 @@ module github.com/blaxel-ai/blaxel-mcp-server
 
 go 1.25.12
 
+toolchain go1.27.3
+
 require (
 	github.com/blaxel-ai/sdk-go v0.18.0
 	github.com/blaxel-ai/toolkit v0.1.38
