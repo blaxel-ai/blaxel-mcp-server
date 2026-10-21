@@ -187,7 +187,7 @@ const createSandboxDescription = "Create a Blaxel sandbox, an isolated VM you ru
 	"Without ttl or expirationPolicies it is kept until you call delete_sandbox (some plan tiers cap its lifetime), so set one for temporary work. " +
 	"ttl and ttl-max-age must be at least 5m and ttl-idle at least 60s; shorter values fail with HTTP 400. To remove a sandbox sooner, delete it. " +
 	"Set createIfNotExist to get the live sandbox with this name back instead of a conflict error. " +
-	"See https://docs.blaxel.ai/Sandboxes/Overview and https://docs.blaxel.ai/Sandboxes/Expiration."
+	"See https://docs.blaxel.ai/Sandboxes/Lifecycle-recipe and https://docs.blaxel.ai/Sandboxes/Expiration."
 
 // maxGracePeriodSeconds is the API's upper bound for both grace periods.
 const maxGracePeriodSeconds = 300

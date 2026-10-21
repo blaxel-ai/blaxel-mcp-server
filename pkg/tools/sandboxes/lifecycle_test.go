@@ -282,7 +282,7 @@ func TestCreateSandboxSchemaStatesLifecycleLimits(t *testing.T) {
 	mcpServer, _ := newCreatorToolTestServer(nil)
 	tool := mcpServer.GetTool("create_sandbox").Tool
 
-	for _, want := range []string{"5m", "60s", "HTTP 400", "delete_sandbox", "standby", "createIfNotExist"} {
+	for _, want := range []string{"5m", "60s", "HTTP 400", "delete_sandbox", "standby", "createIfNotExist", "https://docs.blaxel.ai/Sandboxes/Lifecycle-recipe"} {
 		if !strings.Contains(tool.Description, want) {
 			t.Errorf("create_sandbox description does not mention %q", want)
 		}
