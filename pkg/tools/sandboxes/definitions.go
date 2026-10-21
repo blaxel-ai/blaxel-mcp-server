@@ -189,6 +189,9 @@ const createSandboxDescription = "Create a Blaxel sandbox, an isolated VM you ru
 	"Set createIfNotExist to get the live sandbox with this name back instead of a conflict error. " +
 	"See https://docs.blaxel.ai/Sandboxes/Overview and https://docs.blaxel.ai/Sandboxes/Expiration."
 
+// maxGracePeriodSeconds is the API's upper bound for both grace periods.
+const maxGracePeriodSeconds = 300
+
 // createSandboxToolOptions declares create_sandbox. Parameter names follow the
 // create-sandbox API fields they set; TestCreateSandboxCoversAPIFields keeps
 // them in step with the API.
@@ -292,10 +295,12 @@ func createSandboxToolOptions() []mcp.ToolOption {
 		mcp.WithInteger("standbyGracePeriodSeconds",
 			mcp.Description("Seconds the sandbox gets after a SIGUSR2 signal before it goes to standby, 0 to 300. Default 0: no signal."),
 			mcp.Min(0),
+			mcp.Max(maxGracePeriodSeconds),
 		),
 		mcp.WithInteger("terminationGracePeriodSeconds",
 			mcp.Description("Seconds the sandbox gets after a SIGTERM signal before it is deleted, 0 to 300. Default 0: no signal."),
 			mcp.Min(0),
+			mcp.Max(maxGracePeriodSeconds),
 		),
 		mcp.WithBoolean("createIfNotExist",
 			mcp.Description("If a live sandbox with this name exists, return it unchanged instead of failing with a conflict. The settings in this call are then not applied."),

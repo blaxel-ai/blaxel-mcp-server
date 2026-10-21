@@ -303,6 +303,8 @@ func CreateSandboxErrorHint(message string, opts CreateSandboxOptions) string {
 	switch {
 	case strings.Contains(lower, "too short"):
 		return "Set ttl and ttl-max-age to at least 5m and ttl-idle to at least 60s. To remove a sandbox sooner, call delete_sandbox when you are done with it."
+	case strings.Contains(lower, "graceperiodseconds"):
+		return "Set standbyGracePeriodSeconds and terminationGracePeriodSeconds to a whole number of seconds from 0 to 300."
 	case strings.Contains(lower, "quota exceeded") || strings.Contains(lower, "greater than default expiration"):
 		return quotaErrorHint(lower)
 	case strings.Contains(lower, "must be in the future") || strings.Contains(lower, "date format"):

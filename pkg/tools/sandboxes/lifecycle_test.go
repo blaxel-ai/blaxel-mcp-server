@@ -174,6 +174,7 @@ func TestCreateSandboxToolAddsNextStepToErrors(t *testing.T) {
 		err      string
 		args     map[string]any
 		wantHint []string
+		notHint  []string
 	}{
 		{
 			name:     "ttl below minimum",
@@ -199,6 +200,13 @@ func TestCreateSandboxToolAddsNextStepToErrors(t *testing.T) {
 			args:     map[string]any{"name": "taken"},
 			wantHint: []string{"createIfNotExist"},
 		},
+		{
+			name:     "grace period out of range",
+			err:      "failed to create sandbox with status 400: Invalid sandbox configuration: runtime.standbyGracePeriodSeconds must be between 0 and 300, got 301",
+			args:     map[string]any{"name": "grace", "ttl": "10m", "standbyGracePeriodSeconds": 301},
+			wantHint: []string{"standbyGracePeriodSeconds", "0 to 300"},
+			notHint:  []string{"ttl"},
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			mcpServer, _ := newCreatorToolTestServer(errors.New(test.err))
@@ -210,6 +218,12 @@ func TestCreateSandboxToolAddsNextStepToErrors(t *testing.T) {
 			for _, want := range test.wantHint {
 				if !strings.Contains(text, want) {
 					t.Errorf("hint %q does not mention %q", text, want)
+				}
+			}
+			hint := text[strings.Index(text, "\nNext step: "):]
+			for _, unwanted := range test.notHint {
+				if strings.Contains(hint, unwanted) {
+					t.Errorf("hint %q is about %q, which the error does not name", hint, unwanted)
 				}
 			}
 		})
@@ -295,6 +309,13 @@ func TestCreateSandboxSchemaStatesLifecycleLimits(t *testing.T) {
 	volume, _ := volumes["items"].(map[string]any)
 	if !reflect.DeepEqual(volume["required"], []string{"name", "mountPath"}) {
 		t.Errorf("volumes items required = %v, want name and mountPath", volume["required"])
+	}
+
+	for _, name := range []string{"standbyGracePeriodSeconds", "terminationGracePeriodSeconds"} {
+		grace, _ := properties[name].(map[string]any)
+		if grace["minimum"] != 0 || grace["maximum"] != maxGracePeriodSeconds {
+			t.Errorf("%s range = %v to %v, want the API's 0 to 300", name, grace["minimum"], grace["maximum"])
+		}
 	}
 
 	createIfNotExist, _ := properties["createIfNotExist"].(map[string]any)
