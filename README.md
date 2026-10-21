@@ -174,6 +174,11 @@ export BL_READ_ONLY="true"              # Run in read-only mode
 - `list_sandboxes` - List all sandboxes
 - `get_sandbox` - Get details of a specific sandbox
 - `create_sandbox` - Create a sandbox
+  - Without `ttl` or `expirationPolicies` an idle sandbox goes to standby and is kept until you delete it (some plan tiers cap its lifetime)
+  - `ttl` deletes it a set time after creation; `expirationPolicies` adds `ttl-idle`, `ttl-max-age` and `date` rules (durations use s, m, h, d or w; `ttl` and `ttl-max-age` need at least 5m, `ttl-idle` at least 60s)
+  - `volumes` mounts an existing volume by `name` and `mountPath` (one persistent volume per sandbox); also `labels`, `terminatedRetention` and the standby and termination grace periods
+  - `createIfNotExist` returns a live sandbox with the same name instead of a conflict error
+  - The result lists `nextSteps`: how to run commands, reach ports, and when the sandbox is deleted
 - `delete_sandbox` - Delete a sandbox
 
 ### Job Management

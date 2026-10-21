@@ -1,10 +1,12 @@
 package sandboxes
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/client"
@@ -111,95 +113,145 @@ func (h *SDKHandler) GetSandbox(ctx context.Context, name string) ([]byte, error
 
 // CreateSandbox implements SandboxHandler.CreateSandbox
 func (h *SDKHandler) CreateSandbox(ctx context.Context, name, image string, memory float64, ports, env string) ([]byte, error) {
-	return h.CreateSandboxInRegion(ctx, name, image, memory, ports, env, "")
+	return h.CreateSandboxWithOptions(ctx, CreateSandboxOptions{Name: name, Image: image, Memory: memory, Ports: ports, Env: env})
 }
 
 // CreateSandboxInRegion forwards explicit placement to the sandbox API.
 func (h *SDKHandler) CreateSandboxInRegion(ctx context.Context, name, image string, memory float64, ports, env, region string) ([]byte, error) {
+	return h.CreateSandboxWithOptions(ctx, CreateSandboxOptions{Name: name, Image: image, Memory: memory, Ports: ports, Env: env, Region: region})
+}
+
+// createSandboxBody is the create-sandbox request body. It is written out
+// here because the toolkit SDK types predate the lifecycle, volume and grace
+// period fields.
+type createSandboxBody struct {
+	Metadata createSandboxMetadata `json:"metadata"`
+	Spec     createSandboxSpec     `json:"spec"`
+}
+
+type createSandboxMetadata struct {
+	Name   string            `json:"name"`
+	Labels map[string]string `json:"labels,omitempty"`
+}
+
+type createSandboxSpec struct {
+	Region    string                  `json:"region,omitempty"`
+	Runtime   createSandboxRuntime    `json:"runtime"`
+	Lifecycle *createSandboxLifecycle `json:"lifecycle,omitempty"`
+	Volumes   []VolumeAttachment      `json:"volumes,omitempty"`
+}
+
+type createSandboxRuntime struct {
+	Image                         string        `json:"image,omitempty"`
+	Memory                        int           `json:"memory,omitempty"`
+	Ports                         []sdk.Port    `json:"ports,omitempty"`
+	Envs                          []interface{} `json:"envs,omitempty"`
+	TTL                           string        `json:"ttl,omitempty"`
+	StandbyGracePeriodSeconds     *int          `json:"standbyGracePeriodSeconds,omitempty"`
+	TerminationGracePeriodSeconds *int          `json:"terminationGracePeriodSeconds,omitempty"`
+}
+
+type createSandboxLifecycle struct {
+	ExpirationPolicies  []ExpirationPolicy `json:"expirationPolicies,omitempty"`
+	TerminatedRetention string             `json:"terminatedRetention,omitempty"`
+}
+
+func buildCreateSandboxBody(opts CreateSandboxOptions) (createSandboxBody, error) {
+	if err := opts.Validate(); err != nil {
+		return createSandboxBody{}, err
+	}
+	parsedPorts, err := parseSandboxPorts(opts.Ports)
+	if err != nil {
+		return createSandboxBody{}, err
+	}
+
+	body := createSandboxBody{
+		Metadata: createSandboxMetadata{Name: opts.Name, Labels: opts.Labels},
+		Spec: createSandboxSpec{
+			Region:  opts.Region,
+			Volumes: opts.Volumes,
+			Runtime: createSandboxRuntime{
+				Image:                         opts.Image,
+				Memory:                        int(opts.Memory),
+				TTL:                           opts.TTL,
+				StandbyGracePeriodSeconds:     opts.StandbyGracePeriodSeconds,
+				TerminationGracePeriodSeconds: opts.TerminationGracePeriodSeconds,
+			},
+		},
+	}
+
+	defaultProtocol := "TCP"
+	for i := range parsedPorts {
+		body.Spec.Runtime.Ports = append(body.Spec.Runtime.Ports, sdk.Port{
+			Target:   &parsedPorts[i],
+			Protocol: &defaultProtocol,
+		})
+	}
+
+	envs, err := tools.SetRuntimeEnv(opts.Env)
+	if err != nil {
+		return createSandboxBody{}, err
+	}
+	if envs != nil {
+		body.Spec.Runtime.Envs = *envs
+	}
+
+	if len(opts.ExpirationPolicies) > 0 || opts.TerminatedRetention != "" {
+		lifecycle := &createSandboxLifecycle{TerminatedRetention: opts.TerminatedRetention}
+		for _, policy := range opts.ExpirationPolicies {
+			if policy.Action == "" {
+				policy.Action = ExpirationActionDelete
+			}
+			lifecycle.ExpirationPolicies = append(lifecycle.ExpirationPolicies, policy)
+		}
+		body.Spec.Lifecycle = lifecycle
+	}
+	return body, nil
+}
+
+// CreateSandboxWithOptions implements SandboxCreator.
+func (h *SDKHandler) CreateSandboxWithOptions(ctx context.Context, opts CreateSandboxOptions) ([]byte, error) {
 	if h.sdkClient == nil {
 		return nil, fmt.Errorf("SDK client not initialized")
 	}
-	// The binder validates explicit values and passes zero when memory is omitted.
-	if memory != 0 {
-		if err := validateSandboxMemory(memory); err != nil {
-			return nil, err
-		}
-	}
-	parsedPorts, err := parseSandboxPorts(ports)
+	body, err := buildCreateSandboxBody(opts)
 	if err != nil {
 		return nil, err
 	}
-
-	// Build sandbox request
-	sandboxData := sdk.CreateSandboxJSONRequestBody{
-		Metadata: &sdk.Metadata{
-			Name: &name,
-		},
-		Spec: &sdk.SandboxSpec{
-			Runtime: &sdk.Runtime{},
-		},
+	requestBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode sandbox request: %w", err)
 	}
 
-	if region != "" {
-		sandboxData.Spec.Region = &region
+	var editors []sdk.RequestEditorFn
+	if opts.CreateIfNotExist {
+		editors = append(editors, func(_ context.Context, req *http.Request) error {
+			query := req.URL.Query()
+			query.Set("createIfNotExist", "true")
+			req.URL.RawQuery = query.Encode()
+			return nil
+		})
 	}
 
-	// Add optional image
-	if image != "" {
-		sandboxData.Spec.Runtime.Image = &image
-	}
-
-	// Add optional memory
-	if memory != 0 {
-		mem := int(memory)
-		sandboxData.Spec.Runtime.Memory = &mem
-	}
-
-	// Add optional ports
-	if len(parsedPorts) > 0 {
-		defaultProtocol := "TCP"
-		portsList := make([]sdk.Port, 0, len(parsedPorts))
-		for i := range parsedPorts {
-			portsList = append(portsList, sdk.Port{
-				Target:   &parsedPorts[i],
-				Protocol: &defaultProtocol,
-			})
-		}
-		sandboxData.Spec.Runtime.Ports = &portsList
-	}
-
-	// Add optional environment variables
-	if env != "" {
-		envs, err := tools.SetRuntimeEnv(env)
-		if err != nil {
-			return nil, err
-		}
-		sandboxData.Spec.Runtime.Envs = envs
-	}
-
-	// Create sandbox
-	sandbox, err := h.sdkClient.CreateSandboxWithResponse(ctx, sandboxData)
+	sandbox, err := h.sdkClient.CreateSandboxWithBodyWithResponse(ctx, "application/json", bytes.NewReader(requestBody), editors...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sandbox: %w", err)
 	}
-
 	if sandbox.JSON200 == nil {
-		if sandbox.StatusCode() == 409 {
-			return nil, fmt.Errorf("sandbox with name '%s' already exists", name)
-		}
-		return nil, fmt.Errorf("failed to create sandbox with status %d", sandbox.StatusCode())
+		return nil, createSandboxStatusError(opts.Name, sandbox.StatusCode(), sandbox.Body)
 	}
 
+	created := map[string]interface{}{
+		"name": opts.Name,
+	}
+	if sandbox.JSON200.Status != nil {
+		created["status"] = *sandbox.JSON200.Status
+	}
 	result := map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Sandbox '%s' created successfully", name),
-		"sandbox": map[string]interface{}{
-			"name": name,
-		},
-	}
-
-	if sandbox.JSON200 != nil && sandbox.JSON200.Status != nil {
-		result["sandbox"].(map[string]interface{})["status"] = *sandbox.JSON200.Status
+		"success":   true,
+		"message":   fmt.Sprintf("Sandbox '%s' created successfully", opts.Name),
+		"sandbox":   created,
+		"nextSteps": CreateSandboxNextSteps(opts),
 	}
 
 	jsonData, err := json.MarshalIndent(result, "", "  ")
@@ -208,6 +260,47 @@ func (h *SDKHandler) CreateSandboxInRegion(ctx context.Context, name, image stri
 	}
 
 	return jsonData, nil
+}
+
+// maxAPIErrorMessage bounds how much of an API error message is relayed.
+const maxAPIErrorMessage = 500
+
+// createSandboxStatusError reports a failed create. For a client error it
+// relays the API's own message, which says what to change, such as
+// "ttl 1m is too short: the minimum is 5m". Server error bodies are not
+// relayed. A conflict is a name clash unless the API names another cause,
+// such as a volume attached elsewhere or a deletion still in progress.
+func createSandboxStatusError(name string, status int, body []byte) error {
+	if status >= 400 && status < 500 {
+		message := apiErrorMessage(body)
+		if status == http.StatusConflict && (message == "" || strings.Contains(strings.ToLower(message), "already exist")) {
+			return fmt.Errorf("sandbox with name '%s' already exists", name)
+		}
+		if message != "" {
+			return fmt.Errorf("failed to create sandbox with status %d: %s", status, message)
+		}
+	}
+	return fmt.Errorf("failed to create sandbox with status %d", status)
+}
+
+// apiErrorMessage reads the message of a Blaxel API error body, which is
+// {"message": ...} for sandbox creation and {"error": ...} elsewhere.
+func apiErrorMessage(body []byte) string {
+	var decoded struct {
+		Message string `json:"message"`
+		Error   string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return ""
+	}
+	message := strings.TrimSpace(decoded.Message)
+	if message == "" {
+		message = strings.TrimSpace(decoded.Error)
+	}
+	if runes := []rune(message); len(runes) > maxAPIErrorMessage {
+		message = string(runes[:maxAPIErrorMessage]) + "..."
+	}
+	return message
 }
 
 // DeleteSandbox implements SandboxHandler.DeleteSandbox

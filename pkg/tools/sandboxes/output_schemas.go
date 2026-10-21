@@ -38,7 +38,8 @@ func createSandboxOutputSchema() map[string]any {
 	created := sandboxProperties()
 	created["name"] = tools.StringSchema("Sandbox name")
 	return tools.MutationSchema("Result of creating the sandbox", map[string]any{
-		"sandbox": tools.NestedObjectSchema("Created sandbox", created),
+		"sandbox":   tools.NestedObjectSchema("Created sandbox", created),
+		"nextSteps": tools.ArraySchema("What to do next: how to run commands, reach ports, and when the sandbox is deleted", tools.StringSchema("")),
 	})
 }
 

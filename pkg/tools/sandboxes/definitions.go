@@ -43,15 +43,6 @@ type SandboxHandlerWithReadOnly interface {
 	IsReadOnly() bool
 }
 
-type createSandboxArguments struct {
-	Name      string   `json:"name"`
-	Image     string   `json:"image"`
-	Memory    *float64 `json:"memory"`
-	Ports     string   `json:"ports"`
-	Env       string   `json:"env"`
-	Workspace string   `json:"workspace"`
-}
-
 // RegisterSandboxTools registers sandbox tools with the given handler
 func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *config.Config) {
 	// Check if handler supports readonly mode
@@ -131,86 +122,22 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 	// Only register write operations if not in read-only mode
 	if !isReadOnly {
 		// Create sandbox tool
-		createSandboxTool := mcp.NewTool("create_sandbox",
-			tools.OutputSchema(createSandboxOutputSchema()),
-			mcp.WithToolTitle("Create Sandbox"),
-			mcp.WithTitleAnnotation("Create Sandbox"),
-			mcp.WithDescription("Create a Blaxel sandbox: an isolated environment you can run commands in, with an optional image, exposed ports and environment variables. Use run_sandbox_command once it is running. See https://docs.blaxel.ai/Sandboxes/Overview."),
-			mcp.WithReadOnlyHintAnnotation(false),
-			mcp.WithDestructiveHintAnnotation(true),
-			mcp.WithIdempotentHintAnnotation(false),
-			mcp.WithOpenWorldHintAnnotation(false),
-			mcp.WithString("name",
-				mcp.Required(),
-				mcp.Description("Name for the sandbox"),
-			),
-			mcp.WithString("image",
-				mcp.Description("Docker image to use for the sandbox"),
-			),
-			mcp.WithInteger("memory",
-				mcp.Description("Memory in MB (minimum: 1024, maximum: 262144, default: 1024)"),
-				mcp.Min(1024),
-				mcp.Max(262144),
-				mcp.DefaultNumber(1024),
-			),
-			mcp.WithString("region", mcp.Description("Optional deployment region, for example us-was-1. Omit to use the workspace default.")),
-			mcp.WithString("ports", mcp.Description("Ports to expose from the sandbox, separated by commas (eg. 8080,8081)")),
-			mcp.WithString("env", mcp.Description("Environment variables to set in the sandbox, separated by commas (eg. FOO=bar,BAR=baz)")),
-			mcp.WithString("workspace",
-				mcp.Description("Optional workspace name to override the default workspace"),
-			),
-		)
+		createSandboxTool := mcp.NewTool("create_sandbox", createSandboxToolOptions()...)
 
 		s.AddTool(createSandboxTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// BindArguments serializes map arguments through JSON, which rejects
-			// non-finite floats before it can identify the offending field.
-			if rawMemory, ok := request.GetArguments()["memory"].(float64); ok {
-				if err := validateSandboxMemory(rawMemory); err != nil {
-					return mcp.NewToolResultError(err.Error()), nil
-				}
-			}
-
-			region, err := ParseRegionArgument(request.GetArguments())
+			opts, err := ParseCreateSandboxArguments(request.GetArguments())
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			var args createSandboxArguments
-			if err := request.BindArguments(&args); err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("invalid create_sandbox arguments: %v", err)), nil
-			}
-			if args.Name == "" {
-				return mcp.NewToolResultError("sandbox name is required"), nil
-			}
-			if args.Memory != nil {
-				if err := validateSandboxMemory(*args.Memory); err != nil {
-					return mcp.NewToolResultError(err.Error()), nil
-				}
-			}
-			if _, err := parseSandboxPorts(args.Ports); err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-
-			activeHandler, err := resolveHandler(handler, cfg, args.Workspace)
+			activeHandler, err := resolveHandler(handler, cfg, request.GetString("workspace", ""))
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("failed to override workspace: %v", err)), nil
 			}
-			memory := float64(0)
-			if args.Memory != nil {
-				memory = *args.Memory
-			}
-			var result []byte
-			if region != "" {
-				regional, ok := activeHandler.(RegionalSandboxHandler)
-				if !ok {
-					return mcp.NewToolResultError("explicit region is not supported by this sandbox handler"), nil
-				}
-				result, err = regional.CreateSandboxInRegion(ctx, args.Name, args.Image, memory, args.Ports, args.Env, region)
-			} else {
-				result, err = activeHandler.CreateSandbox(ctx, args.Name, args.Image, memory, args.Ports, args.Env)
-			}
+
+			result, err := createSandbox(ctx, activeHandler, opts)
 			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
+				return mcp.NewToolResultError(withCreateSandboxErrorHint(err.Error(), opts)), nil
 			}
 
 			return tools.StructuredResult(result), nil
@@ -252,5 +179,130 @@ func RegisterSandboxTools(s *server.MCPServer, handler SandboxHandler, cfg *conf
 
 			return tools.StructuredResult(result), nil
 		})
+	}
+}
+
+const createSandboxDescription = "Create a Blaxel sandbox, an isolated VM you run commands in with run_sandbox_command. " +
+	"An idle sandbox goes to standby (scale to zero) and resumes on the next request. " +
+	"Without ttl or expirationPolicies it is kept until you call delete_sandbox (some plan tiers cap its lifetime), so set one for temporary work. " +
+	"ttl and ttl-max-age must be at least 5m and ttl-idle at least 60s; shorter values fail with HTTP 400. To remove a sandbox sooner, delete it. " +
+	"Set createIfNotExist to get the live sandbox with this name back instead of a conflict error. " +
+	"See https://docs.blaxel.ai/Sandboxes/Overview and https://docs.blaxel.ai/Sandboxes/Expiration."
+
+// createSandboxToolOptions declares create_sandbox. Parameter names follow the
+// create-sandbox API fields they set; TestCreateSandboxCoversAPIFields keeps
+// them in step with the API.
+func createSandboxToolOptions() []mcp.ToolOption {
+	expirationPolicy := map[string]any{
+		"type":     "object",
+		"required": []string{"type", "value"},
+		"properties": map[string]any{
+			"type": map[string]any{
+				"type":        "string",
+				"enum":        []string{ExpirationPolicyTTLIdle, ExpirationPolicyTTLMaxAge, ExpirationPolicyDate},
+				"description": "ttl-idle: delete after value without activity (minimum 60s). ttl-max-age: delete value after creation (minimum 5m). date: delete at value.",
+			},
+			"value": map[string]any{
+				"type":        "string",
+				"description": "Duration for ttl-idle and ttl-max-age (units s, m, h, d or w, for example 30m, 24h or 7d), or a future ISO 8601 time for date, for example 2030-01-01T00:00:00Z",
+			},
+			"action": map[string]any{
+				"type":        "string",
+				"enum":        []string{ExpirationActionDelete},
+				"default":     ExpirationActionDelete,
+				"description": "What happens when the rule is reached. Only delete is supported.",
+			},
+		},
+		"additionalProperties": false,
+	}
+	volume := map[string]any{
+		"type":     "object",
+		"required": []string{"name", "mountPath"},
+		"properties": map[string]any{
+			"name": map[string]any{
+				"type":        "string",
+				"description": "Name of an existing volume in the same workspace and region, or a name for a new ephemeral volume",
+			},
+			"mountPath": map[string]any{
+				"type":        "string",
+				"description": "Absolute path to mount the volume at, for example /data. It replaces what the image has at that path.",
+			},
+			"readOnly": map[string]any{
+				"type":        "boolean",
+				"description": "Mount the volume read-only",
+			},
+			"type": map[string]any{
+				"type":        "string",
+				"enum":        []string{VolumeTypePersistent, VolumeTypeEphemeral},
+				"default":     VolumeTypePersistent,
+				"description": "persistent attaches an existing volume whose data outlives the sandbox. ephemeral creates scratch disk that is deleted with the sandbox.",
+			},
+			"sizeMb": map[string]any{
+				"type":        "integer",
+				"minimum":     1,
+				"description": "Size in MB. Required for ephemeral volumes, ignored for persistent ones.",
+			},
+		},
+		"additionalProperties": false,
+	}
+
+	return []mcp.ToolOption{
+		tools.OutputSchema(createSandboxOutputSchema()),
+		mcp.WithToolTitle("Create Sandbox"),
+		mcp.WithTitleAnnotation("Create Sandbox"),
+		mcp.WithDescription(createSandboxDescription),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(false),
+		mcp.WithString("name",
+			mcp.Required(),
+			mcp.Description("Name for the sandbox"),
+		),
+		mcp.WithString("image",
+			mcp.Description("Docker image to use for the sandbox"),
+		),
+		mcp.WithInteger("memory",
+			mcp.Description("Memory in MB (minimum: 1024, maximum: 262144, default: 1024)"),
+			mcp.Min(1024),
+			mcp.Max(262144),
+			mcp.DefaultNumber(1024),
+		),
+		mcp.WithString("region", mcp.Description("Optional deployment region, for example us-was-1. Omit to use the workspace default.")),
+		mcp.WithString("ports", mcp.Description("Ports to expose from the sandbox, separated by commas (eg. 8080,8081)")),
+		mcp.WithString("env", mcp.Description("Environment variables to set in the sandbox, separated by commas (eg. FOO=bar,BAR=baz)")),
+		mcp.WithObject("labels",
+			mcp.Description("Labels to set on the sandbox as string key-value pairs, for example {\"task\": \"build\"}"),
+			mcp.AdditionalProperties(map[string]any{"type": "string"}),
+		),
+		mcp.WithString("ttl",
+			mcp.Description("Delete the sandbox this long after creation, even while in use. Units s, m, h, d or w, for example 30m, 24h or 7d; minimum 5m. To delete after inactivity instead, use expirationPolicies with type ttl-idle."),
+		),
+		mcp.WithArray("expirationPolicies",
+			mcp.Description("Rules that delete the sandbox automatically; the first one reached applies. Use each type at most once."),
+			mcp.Items(expirationPolicy),
+		),
+		mcp.WithString("terminatedRetention",
+			mcp.Description("How long to keep the record of the sandbox after it is deleted, for reading its logs, for example 1h or 24h. Default 5m."),
+		),
+		mcp.WithArray("volumes",
+			mcp.Description("Volumes to mount, set at creation only. A sandbox takes at most one persistent volume, and a persistent volume can be attached to one sandbox at a time. Ephemeral volumes have no such limit."),
+			mcp.Items(volume),
+		),
+		mcp.WithInteger("standbyGracePeriodSeconds",
+			mcp.Description("Seconds the sandbox gets after a SIGUSR2 signal before it goes to standby, 0 to 300. Default 0: no signal."),
+			mcp.Min(0),
+		),
+		mcp.WithInteger("terminationGracePeriodSeconds",
+			mcp.Description("Seconds the sandbox gets after a SIGTERM signal before it is deleted, 0 to 300. Default 0: no signal."),
+			mcp.Min(0),
+		),
+		mcp.WithBoolean("createIfNotExist",
+			mcp.Description("If a live sandbox with this name exists, return it unchanged instead of failing with a conflict. The settings in this call are then not applied."),
+			mcp.DefaultBool(false),
+		),
+		mcp.WithString("workspace",
+			mcp.Description("Optional workspace name to override the default workspace"),
+		),
 	}
 }
