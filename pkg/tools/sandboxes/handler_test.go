@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/blaxel-ai/blaxel-mcp-server/pkg/config"
 	"github.com/blaxel-ai/toolkit/sdk"
@@ -405,5 +406,126 @@ func TestCreateSandboxConflictNamesItsCause(t *testing.T) {
 				t.Fatalf("got error=%v text=%q, want %q and %q", result.IsError, text, tc.want, tc.hint)
 			}
 		})
+	}
+}
+
+// createIfNotExist answers HTTP 200 for both a new and an existing sandbox.
+// The result must describe the sandbox the API returned, not the request.
+func TestCreateIfNotExistDescribesTheExistingSandbox(t *testing.T) {
+	createdAt := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
+	srv, _ := newLifecycleAPIServer(t, http.StatusOK, `{"metadata":{"name":"reused","createdAt":"`+createdAt+`"},`+
+		`"spec":{"runtime":{"ttl":"10m","ports":[{"name":"sandbox-api","target":8080},{"name":"port-4000","target":4000}]},`+
+		`"lifecycle":{"expirationPolicies":[{"type":"ttl-idle","value":"120s","action":"delete"}]}},"status":"DEPLOYED"}`)
+
+	result := callCreateSandboxTool(t, srv, map[string]any{"name": "reused", "ttl": "30m", "ports": "3000", "createIfNotExist": true})
+	if result.IsError {
+		t.Fatal(toolResultText(result))
+	}
+	structured, _ := result.StructuredContent.(map[string]any)
+	if message := fmt.Sprint(structured["message"]); !strings.Contains(message, "already exists and was returned unchanged") {
+		t.Errorf("message = %q, want it to say the sandbox already existed", message)
+	}
+	steps := fmt.Sprint(structured["nextSteps"])
+	for _, want := range []string{"10m after creation (ttl)", "120s without activity (ttl-idle)", "port 4000"} {
+		if !strings.Contains(steps, want) {
+			t.Errorf("next steps do not describe the existing sandbox (%q):\n%s", want, steps)
+		}
+	}
+	for _, unwanted := range []string{"30m", "port 3000", "port 8080", "If a sandbox named"} {
+		if strings.Contains(steps, unwanted) {
+			t.Errorf("next steps describe the request instead of the existing sandbox (%q):\n%s", unwanted, steps)
+		}
+	}
+}
+
+func TestCreateIfNotExistReportsANewSandboxAsCreated(t *testing.T) {
+	createdAt := time.Now().UTC().Format(time.RFC3339Nano)
+	srv, _ := newLifecycleAPIServer(t, http.StatusOK, `{"metadata":{"name":"fresh","createdAt":"`+createdAt+`"},`+
+		`"spec":{"runtime":{"ttl":"30m"}},"status":"DEPLOYED"}`)
+
+	result := callCreateSandboxTool(t, srv, map[string]any{"name": "fresh", "ttl": "30m", "createIfNotExist": true})
+	if result.IsError {
+		t.Fatal(toolResultText(result))
+	}
+	structured, _ := result.StructuredContent.(map[string]any)
+	if message := fmt.Sprint(structured["message"]); !strings.Contains(message, "created successfully") {
+		t.Errorf("message = %q, want a new sandbox reported as created", message)
+	}
+	if steps := fmt.Sprint(structured["nextSteps"]); !strings.Contains(steps, "30m after creation (ttl)") {
+		t.Errorf("next steps = %s, want the new sandbox's expiry", steps)
+	}
+}
+
+// A sandbox created with the SDK or API can carry spec.runtime.expires, which
+// create_sandbox never sets. The API deletes the sandbox at that time, so the
+// result must report it, also when another policy would delete it later.
+func TestCreateIfNotExistReportsTheExistingSandboxExpiresDate(t *testing.T) {
+	createdAt := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
+	for _, test := range []struct {
+		name      string
+		spec      string
+		wantSteps []string
+	}{
+		{
+			name:      "expires only",
+			spec:      `{"runtime":{"expires":"2030-01-01T00:00:00Z"}}`,
+			wantSteps: []string{"deleted automatically", "at 2030-01-01T00:00:00Z"},
+		},
+		{
+			name: "expires before another policy",
+			spec: `{"runtime":{"expires":"2030-01-01T00:00:00Z"},` +
+				`"lifecycle":{"expirationPolicies":[{"type":"date","value":"2031-01-01T00:00:00Z","action":"delete"}]}}`,
+			wantSteps: []string{"at the first of", "at 2030-01-01T00:00:00Z", "at 2031-01-01T00:00:00Z"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			srv, _ := newLifecycleAPIServer(t, http.StatusOK, `{"metadata":{"name":"reused","createdAt":"`+createdAt+`"},`+
+				`"spec":`+test.spec+`,"status":"DEPLOYED"}`)
+
+			result := callCreateSandboxTool(t, srv, map[string]any{"name": "reused", "createIfNotExist": true})
+			if result.IsError {
+				t.Fatal(toolResultText(result))
+			}
+			structured, _ := result.StructuredContent.(map[string]any)
+			steps := fmt.Sprint(structured["nextSteps"])
+			for _, want := range test.wantSteps {
+				if !strings.Contains(steps, want) {
+					t.Errorf("next steps do not mention %q:\n%s", want, steps)
+				}
+			}
+			if strings.Contains(steps, "until you call delete_sandbox") {
+				t.Errorf("next steps promise the sandbox is kept although it expires:\n%s", steps)
+			}
+		})
+	}
+}
+
+// Other servers, such as hosted MCP, build their create_sandbox result with
+// DescribeCreatedSandbox from the raw API response.
+func TestDescribeCreatedSandbox(t *testing.T) {
+	answeredAt := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	opts := CreateSandboxOptions{Name: "box", TTL: "30m", CreateIfNotExist: true}
+	response := func(createdAt time.Time) []byte {
+		return []byte(`{"metadata":{"name":"box","createdAt":"` + createdAt.Format(time.RFC3339Nano) + `"},` +
+			`"spec":{"runtime":{"ttl":"30m","expires":"2030-01-01T00:00:00Z"}},"status":"DEPLOYED"}`)
+	}
+
+	message, steps := DescribeCreatedSandbox(opts, response(answeredAt.Add(-time.Hour)), answeredAt, time.Second)
+	joined := strings.Join(steps, "\n")
+	if !strings.Contains(message, "already exists and was returned unchanged") {
+		t.Errorf("reused sandbox message = %q", message)
+	}
+	for _, want := range []string{"30m after creation (ttl)", "at 2030-01-01T00:00:00Z"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("reused sandbox next steps do not mention %q:\n%s", want, joined)
+		}
+	}
+
+	message, steps = DescribeCreatedSandbox(opts, response(answeredAt), answeredAt, time.Second)
+	if !strings.Contains(message, "created successfully") {
+		t.Errorf("new sandbox message = %q", message)
+	}
+	if joined := strings.Join(steps, "\n"); !strings.Contains(joined, "If a sandbox named") {
+		t.Errorf("new sandbox next steps lost the createIfNotExist caveat:\n%s", joined)
 	}
 }

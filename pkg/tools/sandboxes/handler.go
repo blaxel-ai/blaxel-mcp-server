@@ -233,6 +233,7 @@ func (h *SDKHandler) CreateSandboxWithOptions(ctx context.Context, opts CreateSa
 		})
 	}
 
+	sent := time.Now()
 	sandbox, err := h.sdkClient.CreateSandboxWithBodyWithResponse(ctx, "application/json", bytes.NewReader(requestBody), editors...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sandbox: %w", err)
@@ -240,6 +241,11 @@ func (h *SDKHandler) CreateSandboxWithOptions(ctx context.Context, opts CreateSa
 	if sandbox.JSON200 == nil {
 		return nil, createSandboxStatusError(opts.Name, sandbox.StatusCode(), sandbox.Body)
 	}
+	var answeredAt time.Time
+	if sandbox.HTTPResponse != nil {
+		answeredAt, _ = http.ParseTime(sandbox.HTTPResponse.Header.Get("Date"))
+	}
+	message, nextSteps := DescribeCreatedSandbox(opts, sandbox.Body, answeredAt, time.Since(sent))
 
 	created := map[string]interface{}{
 		"name": opts.Name,
@@ -249,9 +255,9 @@ func (h *SDKHandler) CreateSandboxWithOptions(ctx context.Context, opts CreateSa
 	}
 	result := map[string]interface{}{
 		"success":   true,
-		"message":   fmt.Sprintf("Sandbox '%s' created successfully", opts.Name),
+		"message":   message,
 		"sandbox":   created,
-		"nextSteps": CreateSandboxNextSteps(opts),
+		"nextSteps": nextSteps,
 	}
 
 	jsonData, err := json.MarshalIndent(result, "", "  ")
@@ -260,6 +266,99 @@ func (h *SDKHandler) CreateSandboxWithOptions(ctx context.Context, opts CreateSa
 	}
 
 	return jsonData, nil
+}
+
+// createdSandbox is the part of the create-sandbox response that next steps
+// describe.
+type createdSandbox struct {
+	Metadata struct {
+		CreatedAt string `json:"createdAt"`
+	} `json:"metadata"`
+	Spec *struct {
+		Runtime *struct {
+			TTL     string `json:"ttl"`
+			Expires string `json:"expires"`
+			Ports   []struct {
+				Name   string `json:"name"`
+				Target int    `json:"target"`
+			} `json:"ports"`
+		} `json:"runtime"`
+		Lifecycle *struct {
+			ExpirationPolicies []ExpirationPolicy `json:"expirationPolicies"`
+		} `json:"lifecycle"`
+		Volumes []VolumeAttachment `json:"volumes"`
+	} `json:"spec"`
+}
+
+// sandboxAPIPortName names the port the API adds to every sandbox for its own
+// use. It is not one the caller asked to expose.
+const sandboxAPIPortName = "sandbox-api"
+
+// existingSandboxMargin covers the 1s resolution of the Date header and clock
+// differences between API hosts when telling a new sandbox from an existing one.
+const existingSandboxMargin = 5 * time.Second
+
+// DescribeCreatedSandbox returns the result message and next steps for a
+// successful create. body is the create-sandbox response, answeredAt its Date
+// header (zero when absent) and elapsed how long the call took. When
+// createIfNotExist returned a sandbox that existed before the call, the
+// message says so and the next steps describe that sandbox, not opts.
+func DescribeCreatedSandbox(opts CreateSandboxOptions, body []byte, answeredAt time.Time, elapsed time.Duration) (message string, nextSteps []string) {
+	applied, existed := appliedCreateSettings(opts, body, answeredAt, elapsed)
+	message = fmt.Sprintf("Sandbox '%s' created successfully", opts.Name)
+	if existed {
+		message = fmt.Sprintf("Sandbox '%s' already exists and was returned unchanged; the settings in this call were not applied", opts.Name)
+	}
+	return message, CreateSandboxNextSteps(applied)
+}
+
+// appliedCreateSettings returns opts with the expiry, ports and volumes the
+// API reports for the sandbox it returned, so next steps describe that
+// sandbox even when createIfNotExist returned an existing one with other
+// settings. existed is true when createIfNotExist returned a sandbox created
+// before this call: answeredAt (the response Date) is later than its
+// creation time by more than the call took. Unless existed is true, the next
+// steps keep the createIfNotExist caveat.
+func appliedCreateSettings(opts CreateSandboxOptions, body []byte, answeredAt time.Time, elapsed time.Duration) (applied CreateSandboxOptions, existed bool) {
+	applied = opts
+	var returned createdSandbox
+	if err := json.Unmarshal(body, &returned); err != nil || returned.Spec == nil {
+		return applied, false
+	}
+	if runtime := returned.Spec.Runtime; runtime != nil {
+		applied.TTL = runtime.TTL
+		var ports []string
+		for _, port := range runtime.Ports {
+			if port.Name != sandboxAPIPortName && port.Target > 0 {
+				ports = append(ports, fmt.Sprint(port.Target))
+			}
+		}
+		applied.Ports = strings.Join(ports, ",")
+	}
+	applied.ExpirationPolicies = nil
+	if returned.Spec.Lifecycle != nil {
+		applied.ExpirationPolicies = returned.Spec.Lifecycle.ExpirationPolicies
+	}
+	// create_sandbox never sets runtime.expires, but a sandbox created
+	// elsewhere can have it. It deletes the sandbox at that time, as a date
+	// policy does.
+	if runtime := returned.Spec.Runtime; runtime != nil && runtime.Expires != "" {
+		applied.ExpirationPolicies = append(applied.ExpirationPolicies, ExpirationPolicy{Type: ExpirationPolicyDate, Value: runtime.Expires, Action: ExpirationActionDelete})
+	}
+	applied.Volumes = returned.Spec.Volumes
+
+	if !opts.CreateIfNotExist || answeredAt.IsZero() {
+		return applied, false
+	}
+	createdAt, err := time.Parse(time.RFC3339Nano, returned.Metadata.CreatedAt)
+	if err != nil {
+		return applied, false
+	}
+	existed = answeredAt.Sub(createdAt) > elapsed+existingSandboxMargin
+	// The message then says so; otherwise keep the caveat, since a sandbox
+	// created by another caller within the margin looks new.
+	applied.CreateIfNotExist = !existed
+	return applied, existed
 }
 
 // maxAPIErrorMessage bounds how much of an API error message is relayed.
