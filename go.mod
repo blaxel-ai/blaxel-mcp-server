@@ -3,7 +3,7 @@ module github.com/blaxel-ai/blaxel-mcp-server
 go 1.25.12
 
 require (
-	github.com/blaxel-ai/sdk-go v0.25.1
+	github.com/blaxel-ai/sdk-go v0.29.1
 	github.com/blaxel-ai/toolkit v0.1.71
 	github.com/joho/godotenv v1.5.1
 	github.com/mark3labs/mcp-go v0.57.0
