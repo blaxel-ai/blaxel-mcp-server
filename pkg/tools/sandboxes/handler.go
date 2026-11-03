@@ -276,19 +276,20 @@ type createdSandbox struct {
 	Metadata struct {
 		CreatedAt string `json:"createdAt"`
 	} `json:"metadata"`
+	// Pointers tell a field the response left out from one it returned empty.
 	Spec *struct {
 		Runtime *struct {
-			TTL     string `json:"ttl"`
-			Expires string `json:"expires"`
-			Ports   []struct {
+			TTL     *string `json:"ttl"`
+			Expires string  `json:"expires"`
+			Ports   *[]struct {
 				Name   string `json:"name"`
 				Target int    `json:"target"`
 			} `json:"ports"`
 		} `json:"runtime"`
 		Lifecycle *struct {
-			ExpirationPolicies []ExpirationPolicy `json:"expirationPolicies"`
+			ExpirationPolicies *[]ExpirationPolicy `json:"expirationPolicies"`
 		} `json:"lifecycle"`
-		Volumes []VolumeAttachment `json:"volumes"`
+		Volumes *[]VolumeAttachment `json:"volumes"`
 	} `json:"spec"`
 }
 
@@ -327,39 +328,51 @@ func appliedCreateSettings(opts CreateSandboxOptions, body []byte, answeredAt ti
 	if err := json.Unmarshal(body, &returned); err != nil || returned.Spec == nil {
 		return applied, false
 	}
-	if runtime := returned.Spec.Runtime; runtime != nil {
-		applied.TTL = runtime.TTL
+	if opts.CreateIfNotExist && !answeredAt.IsZero() {
+		if createdAt, err := time.Parse(time.RFC3339Nano, returned.Metadata.CreatedAt); err == nil {
+			existed = answeredAt.Sub(createdAt) > elapsed+existingSandboxMargin
+			// The message then says so; otherwise keep the caveat, since a
+			// sandbox created by another caller within the margin looks new.
+			applied.CreateIfNotExist = !existed
+		}
+	}
+
+	// For an existing sandbox a missing field means it has none of that
+	// setting. For a new one it means the response left it out, so the
+	// request's value stands.
+	spec := returned.Spec
+	if runtime := spec.Runtime; runtime != nil && runtime.TTL != nil {
+		applied.TTL = *runtime.TTL
+	} else if existed {
+		applied.TTL = ""
+	}
+	if runtime := spec.Runtime; runtime != nil && runtime.Ports != nil {
 		var ports []string
-		for _, port := range runtime.Ports {
+		for _, port := range *runtime.Ports {
 			if port.Name != sandboxAPIPortName && port.Target > 0 {
 				ports = append(ports, fmt.Sprint(port.Target))
 			}
 		}
 		applied.Ports = strings.Join(ports, ",")
+	} else if existed {
+		applied.Ports = ""
 	}
-	applied.ExpirationPolicies = nil
-	if returned.Spec.Lifecycle != nil {
-		applied.ExpirationPolicies = returned.Spec.Lifecycle.ExpirationPolicies
+	if spec.Lifecycle != nil && spec.Lifecycle.ExpirationPolicies != nil {
+		applied.ExpirationPolicies = *spec.Lifecycle.ExpirationPolicies
+	} else if existed {
+		applied.ExpirationPolicies = nil
 	}
 	// create_sandbox never sets runtime.expires, but a sandbox created
 	// elsewhere can have it. It deletes the sandbox at that time, as a date
 	// policy does.
-	if runtime := returned.Spec.Runtime; runtime != nil && runtime.Expires != "" {
+	if runtime := spec.Runtime; runtime != nil && runtime.Expires != "" {
 		applied.ExpirationPolicies = append(applied.ExpirationPolicies, ExpirationPolicy{Type: ExpirationPolicyDate, Value: runtime.Expires, Action: ExpirationActionDelete})
 	}
-	applied.Volumes = returned.Spec.Volumes
-
-	if !opts.CreateIfNotExist || answeredAt.IsZero() {
-		return applied, false
+	if spec.Volumes != nil {
+		applied.Volumes = *spec.Volumes
+	} else if existed {
+		applied.Volumes = nil
 	}
-	createdAt, err := time.Parse(time.RFC3339Nano, returned.Metadata.CreatedAt)
-	if err != nil {
-		return applied, false
-	}
-	existed = answeredAt.Sub(createdAt) > elapsed+existingSandboxMargin
-	// The message then says so; otherwise keep the caveat, since a sandbox
-	// created by another caller within the margin looks new.
-	applied.CreateIfNotExist = !existed
 	return applied, existed
 }
 

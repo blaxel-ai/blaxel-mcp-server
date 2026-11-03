@@ -552,3 +552,30 @@ func TestGetSandboxKeepsFieldsTheSDKTypeLacks(t *testing.T) {
 		}
 	}
 }
+
+// A response that leaves fields out must not erase what a new sandbox was
+// created with; for a sandbox that existed, a missing field means it has none.
+func TestDescribeCreatedSandboxKeepsRequestForOmittedFields(t *testing.T) {
+	answeredAt := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	opts := CreateSandboxOptions{Name: "box", TTL: "30m", Ports: "3000", CreateIfNotExist: true}
+	response := func(createdAt time.Time) []byte {
+		return []byte(`{"metadata":{"name":"box","createdAt":"` + createdAt.Format(time.RFC3339Nano) + `"},` +
+			`"spec":{"runtime":{"image":"blaxel/base-image:latest"}},"status":"DEPLOYED"}`)
+	}
+
+	_, steps := DescribeCreatedSandbox(opts, response(answeredAt), answeredAt, time.Second)
+	joined := strings.Join(steps, "\n")
+	for _, want := range []string{"30m after creation (ttl)", "To reach port 3000"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("new sandbox next steps do not mention %q:\n%s", want, joined)
+		}
+	}
+
+	_, steps = DescribeCreatedSandbox(opts, response(answeredAt.Add(-time.Hour)), answeredAt, time.Second)
+	joined = strings.Join(steps, "\n")
+	for _, unwanted := range []string{"30m after creation (ttl)", "To reach port 3000"} {
+		if strings.Contains(joined, unwanted) {
+			t.Errorf("existing sandbox next steps describe the request (%q):\n%s", unwanted, joined)
+		}
+	}
+}
