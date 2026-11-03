@@ -426,7 +426,7 @@ func TestCreateIfNotExistDescribesTheExistingSandbox(t *testing.T) {
 		t.Errorf("message = %q, want it to say the sandbox already existed", message)
 	}
 	steps := fmt.Sprint(structured["nextSteps"])
-	for _, want := range []string{"10m after creation (ttl)", "120s without activity (ttl-idle)", "port 4000"} {
+	for _, want := range []string{"10m after creation (ttl)", "120s in standby (ttl-idle)", "port 4000"} {
 		if !strings.Contains(steps, want) {
 			t.Errorf("next steps do not describe the existing sandbox (%q):\n%s", want, steps)
 		}

@@ -272,7 +272,7 @@ func CreateSandboxNextSteps(opts CreateSandboxOptions) []string {
 		for _, policy := range opts.ExpirationPolicies {
 			switch policy.Type {
 			case ExpirationPolicyTTLIdle:
-				rules = append(rules, fmt.Sprintf("%s without activity (ttl-idle)", policy.Value))
+				rules = append(rules, fmt.Sprintf("%s in standby (ttl-idle)", policy.Value))
 			case ExpirationPolicyTTLMaxAge:
 				rules = append(rules, fmt.Sprintf("%s after creation (ttl-max-age)", policy.Value))
 			case ExpirationPolicyDate:

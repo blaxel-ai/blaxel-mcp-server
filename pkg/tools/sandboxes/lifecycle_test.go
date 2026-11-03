@@ -255,7 +255,7 @@ func TestCreateSandboxNextSteps(t *testing.T) {
 	for _, want := range []string{
 		`run_sandbox_command (name "expiring")`,
 		"preview URL", "port 3000", "$HOST",
-		"24h after creation (ttl)", "1h without activity (ttl-idle)", "at 2030-01-01T00:00:00Z (date)", "delete_sandbox",
+		"24h after creation (ttl)", "1h in standby (ttl-idle)", "at 2030-01-01T00:00:00Z (date)", "delete_sandbox",
 		`volume "data"`,
 		"already existed",
 	} {

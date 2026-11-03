@@ -203,7 +203,7 @@ func createSandboxToolOptions() []mcp.ToolOption {
 			"type": map[string]any{
 				"type":        "string",
 				"enum":        []string{ExpirationPolicyTTLIdle, ExpirationPolicyTTLMaxAge, ExpirationPolicyDate},
-				"description": "ttl-idle: delete after value without activity (minimum 60s). ttl-max-age: delete value after creation (minimum 5m). date: delete at value.",
+				"description": "ttl-idle: delete after value in standby, counted from when it goes to standby and reset when it resumes (minimum 60s). ttl-max-age: delete value after creation (minimum 5m). date: delete at value.",
 			},
 			"value": map[string]any{
 				"type":        "string",
@@ -279,7 +279,7 @@ func createSandboxToolOptions() []mcp.ToolOption {
 			mcp.AdditionalProperties(map[string]any{"type": "string"}),
 		),
 		mcp.WithString("ttl",
-			mcp.Description("Delete the sandbox this long after creation, even while in use. Units s, m, h, d or w, for example 30m, 24h or 7d; minimum 5m. To delete after inactivity instead, use expirationPolicies with type ttl-idle."),
+			mcp.Description("Delete the sandbox this long after creation, even while in use. Units s, m, h, d or w, for example 30m, 24h or 7d; minimum 5m. To delete after time in standby instead, use expirationPolicies with type ttl-idle."),
 		),
 		mcp.WithArray("expirationPolicies",
 			mcp.Description("Rules that delete the sandbox automatically; the first one reached applies. Use each type at most once."),
