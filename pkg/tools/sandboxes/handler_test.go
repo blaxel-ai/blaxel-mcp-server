@@ -529,3 +529,26 @@ func TestDescribeCreatedSandbox(t *testing.T) {
 		t.Errorf("new sandbox next steps lost the createIfNotExist caveat:\n%s", joined)
 	}
 }
+
+func TestGetSandboxKeepsFieldsTheSDKTypeLacks(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"metadata":{"name":"graceful"},"spec":{"runtime":{"image":"blaxel/base-image:latest",` +
+			`"standbyGracePeriodSeconds":12,"terminationGracePeriodSeconds":30}},"status":"DEPLOYED"}`))
+	}))
+	defer api.Close()
+	handler, err := NewSDKHandler(&config.Config{APIEndpoint: api.URL, RunEndpoint: api.URL, Workspace: "test",
+		Credentials: sdk.Credentials{APIKey: "test-key"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := handler.GetSandbox(context.Background(), "graceful")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"terminationGracePeriodSeconds": 30`, `"standbyGracePeriodSeconds": 12`, `"status": "DEPLOYED"`} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("get_sandbox output lacks %s:\n%s", want, out)
+		}
+	}
+}

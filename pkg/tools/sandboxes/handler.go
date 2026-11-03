@@ -102,13 +102,15 @@ func (h *SDKHandler) GetSandbox(ctx context.Context, name string) ([]byte, error
 		return nil, fmt.Errorf("no sandbox found")
 	}
 
-	// Convert to JSON for better formatting
-	jsonData, err := json.MarshalIndent(*sandbox.JSON200, "", "  ")
-	if err != nil {
+	// Return the API's own JSON: the toolkit SDK type predates fields such as
+	// the grace periods, so re-encoding it would drop settings create_sandbox
+	// accepts and the agent could not confirm them here.
+	var jsonData bytes.Buffer
+	if err := json.Indent(&jsonData, sandbox.Body, "", "  "); err != nil {
 		return nil, fmt.Errorf("failed to format sandbox data: %w", err)
 	}
 
-	return jsonData, nil
+	return jsonData.Bytes(), nil
 }
 
 // CreateSandbox implements SandboxHandler.CreateSandbox
