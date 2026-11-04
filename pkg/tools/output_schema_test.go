@@ -115,6 +115,8 @@ var outputFixtures = map[string][]string{
 	"create_sandbox": {
 		`{"success":true,"message":"Sandbox 'fixture' created successfully","sandbox":{"name":"fixture","status":"DEPLOYING"}}`,
 		`{"success":true,"message":"Sandbox 'fixture' created successfully","sandbox":{"metadata":{"name":"fixture"},"spec":{"runtime":{"image":"img"}},"status":"DEPLOYING"}}`,
+		`{"success":true,"message":"Sandbox 'fixture' created successfully","sandbox":{"name":"fixture","status":"DEPLOYING"},"nextSteps":["Run commands with run_sandbox_command (name \"fixture\") once its status is DEPLOYED; check with get_sandbox.","The sandbox is deleted automatically at the first of: 24h after creation (ttl). Call delete_sandbox to remove it sooner."]}`,
+		`{"success":true,"message":"Sandbox 'fixture' created successfully","sandbox":{"metadata":{"name":"fixture"},"spec":{"runtime":{"ttl":"24h"},"lifecycle":{"expirationPolicies":[{"type":"ttl-idle","value":"1h","action":"delete"}]},"volumes":[{"name":"data","mountPath":"/data"}]},"status":"DEPLOYING"},"nextSteps":["Run commands with run_sandbox_command."]}`,
 	},
 	"delete_sandbox": {`{"success":true,"message":"Sandbox 'fixture' deleted successfully"}`},
 	"list_service_accounts": {
@@ -583,6 +585,7 @@ func TestOutputSchemasRejectMismatchedResults(t *testing.T) {
 		{"list_workspace_users", `{"users":"not a list"}`},
 		{"run_agent", `{"body":"missing format"}`},
 		{"run_model", `{"format":"xml","body":""}`},
+		{"create_sandbox", `{"success":true,"message":"created","nextSteps":"not a list"}`},
 	} {
 		t.Run(tc.tool, func(t *testing.T) {
 			schema := compileOutputSchema(t, s.GetTool(tc.tool).Tool)
